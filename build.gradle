@@ -1,0 +1,72 @@
+apply plugin: 'scala'
+apply plugin: 'maven-publish'
+
+version = '1.0.0-SNAPSHOT'
+project.sourceCompatibility = '1.7'
+project.targetCompatibility = '1.7'
+
+repositories{
+    maven { url "http://nexus.cb.ntent.com/nexus/content/groups/public/" }
+}
+
+if(rootProject.hasProperty("teamcity")) {
+    version = "1.0.0." + teamcity["build.number"]
+    publishing {repositories {maven {
+        credentials {
+            username mavenUser
+            password mavenPassword
+        }
+        url "http://nexus.cb.ntent.com/nexus/content/repositories/releases/" }}}
+} else {
+    version = '1.0.0-SNAPSHOT'
+    publishing {repositories {maven {
+        credentials {
+            username mavenUser
+            password mavenPassword
+        }
+        url "http://nexus.cb.ntent.com/nexus/content/repositories/snapshots/"
+    }}}
+}
+
+dependencies {
+    compile "com.typesafe:config:1.3.0"
+    compile "org.scala-lang:scala-library:$scala_version"
+
+    compile 'com.ning:async-http-client:1.9.33'
+    //compile 'org.scala-lang.modules:scala-async_2.10:0.9.5'
+    compile 'com.fasterxml.jackson.module:jackson-module-scala_2.10:2.6.3'
+
+    compile 'io.reactivex:rxscala_2.10:0.26.0'
+
+    compile 'org.slf4j:slf4j-simple:1.7.14'
+    compile 'com.typesafe.scala-logging:scala-logging-slf4j_2.10:2.1.2'
+
+    // test
+    testCompile 'org.scalamock:scalamock-scalatest-support_2.10:3.2.2'
+    testCompile 'org.scalatest:scalatest_2.10:2.2.6'
+    testCompile 'org.apache.commons:commons-io:1.3.2'
+    testCompile "org.slf4j:slf4j-api:$slf4j_version"
+}
+
+task sourceJar(type: Jar) {
+    from sourceSets.main.allSource
+}
+
+publishing {
+    publications {
+        mavenPub(MavenPublication) {
+            from components.java
+            artifact sourceJar {classifier "sources"}
+        }
+    }
+
+    repositories {
+        maven {
+            url 'http://nexus.cb.ntent.com/nexus/content/repositories/snapshots/'
+            credentials {
+                username = mavenUser
+                password = mavenPassword
+            }
+        }
+    }
+}
