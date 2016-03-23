@@ -2,6 +2,7 @@ apply plugin: 'scala'
 apply plugin: 'maven-publish'
 
 version = '1.0.0-SNAPSHOT'
+group = 'com.ntent'
 project.sourceCompatibility = '1.7'
 project.targetCompatibility = '1.7'
 
