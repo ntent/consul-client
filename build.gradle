@@ -12,12 +12,17 @@ repositories{
 
 if(rootProject.hasProperty("teamcity")) {
     version = "1.0.0." + teamcity["build.number"]
-    publishing {repositories {maven {
-        credentials {
-            username mavenUser
-            password mavenPassword
+    publishing {
+        repositories {
+            maven {
+                credentials {
+                    username mavenUser
+                    password mavenPassword
+                }
+                url "http://nexus.cb.ntent.com/nexus/content/repositories/releases/"
+            }
         }
-        url "http://nexus.cb.ntent.com/nexus/content/repositories/releases/" }}}
+    }
 } else {
     version = '1.0.0-SNAPSHOT'
     publishing {repositories {maven {
@@ -58,16 +63,6 @@ publishing {
         mavenPub(MavenPublication) {
             from components.java
             artifact sourceJar {classifier "sources"}
-        }
-    }
-
-    repositories {
-        maven {
-            url 'http://nexus.cb.ntent.com/nexus/content/repositories/snapshots/'
-            credentials {
-                username = mavenUser
-                password = mavenPassword
-            }
         }
     }
 }
