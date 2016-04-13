@@ -19,6 +19,7 @@ class Dconfig() extends StrictLogging {
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   lazy val configRootPath = appSettings.getString("dconfig.consul.configRoot").stripMargin('/') + '/'
+  lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
 
   // incoming list is from least to most specific, but we want to check most specific first
