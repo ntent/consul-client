@@ -50,7 +50,7 @@ class ConsulApiImplDefault() {
       addQueryParams(consulQueryParams).
       execute().get(30, TimeUnit.SECONDS)
     val content = response.getResponseBody
-    val keys = mapper.readValue(content, classOf[Array[ConsulKey]])
+    val keys = if(content == null || content.length == 0) Array[ConsulKey]() else mapper.readValue(content, classOf[Array[ConsulKey]])
     index = response.getHeader("X-Consul-Index").toLong
     keys
   }
