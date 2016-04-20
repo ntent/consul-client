@@ -118,6 +118,11 @@ class Dconfig() extends StrictLogging {
   }
 }
 
+object Dconfig {
+  private lazy val instance = new Dconfig()
+  def apply() = instance
+}
+
 // Do NOT make it inner class, because serialization (at least jackson) will fail to create instance of object
 case class ConsulKey(
   val CreateIndex: Long,

@@ -4,13 +4,13 @@ import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.TimeoutException
 
-import com.ntent.configuration.{ConsulApiImplDefault, ConsulKey, Dconfig}
+import com.ntent.configuration.{ConsulApiImplDefault, Dconfig}
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
 import org.scalatest._
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Future, Await, Promise}
+import scala.concurrent.{Await, Future, Promise}
 import scala.sys.process._
 import scala.concurrent.ExecutionContext.Implicits.global
 

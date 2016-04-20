@@ -18,11 +18,14 @@ class ConsulApiImplDefault() {
   val mapper = (new ObjectMapper() with ScalaObjectMapper).registerModule(DefaultScalaModule)
   var index: Long = 0L
 
-  private val appSettings = ConfigFactory.load()
+  private val appSettings = ConfigFactory.
+    defaultOverrides().
+    withFallback(ConfigFactory.defaultApplication()).
+    withFallback(ConfigFactory.parseResources("reference.conf"))
+
   private val dc = appSettings.getString("dconfig.consul.dc")
   private val kvUrl = new URL(new URL(appSettings.getString("dconfig.consul.url")), "v1/kv/")
 
-  //lazy val configRootPath = appSettings.getString("dconfig.consul.configRoot").stripMargin('/') + '/'
   private lazy val consulQueryParams = Map(
     "seperator" -> "/",
     "dc" -> dc,
