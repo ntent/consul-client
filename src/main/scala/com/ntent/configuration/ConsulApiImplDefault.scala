@@ -23,12 +23,10 @@ class ConsulApiImplDefault() {
     withFallback(ConfigFactory.defaultApplication()).
     withFallback(ConfigFactory.parseResources("reference.conf"))
 
-  private val dc = appSettings.getString("dconfig.consul.dc")
   private val kvUrl = new URL(new URL(appSettings.getString("dconfig.consul.url")), "v1/kv/")
 
   private lazy val consulQueryParams = Map(
     "seperator" -> "/",
-    "dc" -> dc,
     "recurse" -> "").
     map(p => new Param(p._1, p._2)).toList
 
@@ -37,7 +35,6 @@ class ConsulApiImplDefault() {
 
     new AsyncHttpClient().
       preparePut(url.toString).
-      addQueryParam("dc", dc).
       setBody(value).
       execute().get(15, TimeUnit.SECONDS)
   }

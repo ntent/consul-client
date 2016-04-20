@@ -22,7 +22,6 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
   val rootFolder = "test/app1"
   System.setProperty("dconfig.consul.configRoot", rootFolder)
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
-  System.setProperty("dconfig.consul.dc", "testdc")
   System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
 
   var consulProcess: Process = null
