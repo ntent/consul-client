@@ -82,7 +82,16 @@ class Dconfig() extends StrictLogging {
             if(keys != null)
               settings = rebuild(keys)
           } catch {
-            case e: java.util.concurrent.TimeoutException => {/* long poll timeout, keep going */}
+            case e: java.util.concurrent.ExecutionException => {
+              val cause = e.getCause
+              if (cause.isInstanceOf[java.util.concurrent.TimeoutException]) {
+                /* long poll timeout, keep going */
+              }
+              else {
+                logger.info("Error in property fetching loop", e)
+                Thread.sleep(3000)
+              }
+            }
             case e: Exception => {
               logger.info("Error in property fetching loop", e)
               Thread.sleep(3000)
