@@ -32,7 +32,9 @@ class Dconfig() extends StrictLogging {
   private lazy val events = Subject[(String,String)]()
 
   /** Return (value, namespace) */
-  def get(key: String): Option[(String,String)] = get(key, true)
+  def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
+
+  def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._1
 
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
