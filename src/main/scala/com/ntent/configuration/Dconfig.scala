@@ -124,7 +124,7 @@ class Dconfig() extends StrictLogging {
   }
 
   private def expandAndReverseNamespaces() = {
-    appSettings.getString("dconfig.consul.keyStores").split(' ').map(_.trim).
+    appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|").map(_.trim).
       reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
   }
 }
