@@ -73,8 +73,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
   "Consul" should "list keys under root" in {
     val dc = new Dconfig()
     val res = dc.get("key1")
-    assert(res.isDefined)
-    assert(res.get._1 == "value1")
+    assert(res == "value1")
   }
 
   it should "select right value if key defined in 2 namespaces" in {
@@ -83,8 +82,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
       ConfigFactory.invalidateCaches()
       val dc = new Dconfig()
       val res = dc.get("key2")
-      assert(res.isDefined)
-      assert(res.get._1 == "value2")
+      assert(res == "value2")
     } finally {
       System.clearProperty("dconfig.consul.keyStores")
     }
@@ -98,8 +96,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
 
       val dc = new Dconfig()
       val res = dc.get("key2")
-      assert(res.isDefined)
-      assert(res.get._1 == "value2 override")
+      assert(res == "value2 override")
     } finally {
       System.clearProperty("dconfig.consul.keyStores")
     }
@@ -152,8 +149,9 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
 
   it should "return None on non-existing key" in {
     val dc = new Dconfig()
-    val res = dc.get("no-such-key")
-    assert(res.isEmpty)
+    intercept[RuntimeException] {
+      val res = dc.get("no-such-key")
+    }
   }
 
   it should "override value for local host" in {
@@ -165,6 +163,11 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
 
     Thread.sleep(5000)
     val got = dc.get("key1")
-    assert(got.get._1 == value)
+    assert(got == value)
   }
+
+  /*it should "not leak threads" in {
+    val dc = Dconfig()
+    Thread.sleep(5000000)
+  }*/
 }

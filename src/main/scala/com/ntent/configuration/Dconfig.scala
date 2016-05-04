@@ -1,13 +1,12 @@
 package com.ntent.configuration
 
-import com.ning.http.util.Base64
 import com.typesafe.scalalogging.slf4j.StrictLogging
-import rx.lang.scala.{Subject, Observable}
-import rx.lang.scala.schedulers.{ExecutionContextScheduler, TrampolineScheduler}
-
+import rx.lang.scala.{Observable, Subject}
+import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
 
 import com.typesafe.config.ConfigFactory
+import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.blocking
@@ -144,6 +143,6 @@ case class ConsulKey(
   val Value: String
 ) {
   def this(kv: (String,String)) = this(0L, 0L, 0L, kv._1, 0L,
-    if(kv._2 == null) "" else Base64.encode(StandardCharsets.UTF_8.encode(kv._2).array()))
-  val decodedValue = if(Value == null || Value == "") "" else new String(Base64.decode(Value), StandardCharsets.UTF_8)
+    if(kv._2 == null) "" else Base64.encodeBase64String(StandardCharsets.UTF_8.encode(kv._2).array()))
+  val decodedValue = if(Value == null || Value == "") "" else new String(Base64.decodeBase64(Value))
 }

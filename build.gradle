@@ -38,8 +38,8 @@ dependencies {
     compile "com.typesafe:config:1.3.0"
     compile "org.scala-lang:scala-library:$scala_version"
 
-    compile 'com.ning:async-http-client:1.9.33'
-    //compile 'org.scala-lang.modules:scala-async_2.10:0.9.5'
+    //compile 'org.apache.httpcomponents:httpclient:4.5.2'
+    compile 'org.apache.httpcomponents:fluent-hc:4.5.2'
     compile 'com.fasterxml.jackson.module:jackson-module-scala_2.10:2.6.3'
 
     compile 'io.reactivex:rxscala_2.10:0.26.0'
