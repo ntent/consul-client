@@ -23,6 +23,7 @@ class Dconfig() extends StrictLogging {
 
   // incoming list is from least to most specific, but we want to check most specific first
   private val defaultKeyStores = expandAndReverseNamespaces()
+  val keystores = defaultKeyStores.reverse
 
   private var settings = initialRead()
 

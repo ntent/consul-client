@@ -20,7 +20,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
   */
 class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
   val rootFolder = "test/app1"
-  System.setProperty("dconfig.consul.configRoot", rootFolder)
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
   System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
 
@@ -42,6 +41,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
 
   override def beforeEach() = {
     System.clearProperty("dconfig.consul.keyStores")
+    System.setProperty("dconfig.consul.configRoot", rootFolder)
     ConfigFactory.invalidateCaches()
   }
 
@@ -152,6 +152,15 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     intercept[RuntimeException] {
       val res = dc.get("no-such-key")
     }
+  }
+
+  it should "not throw if root namespace does not exist" in {
+    val ns = "dev stg nosuchnamespace"
+    System.setProperty("dconfig.consul.keyStores", ns)
+    System.setProperty("dconfig.consul.configRoot", rootFolder + "/nosuchroot")
+    ConfigFactory.invalidateCaches()
+    val dc = new Dconfig()
+    assert(ns == dc.keystores.mkString(" "))
   }
 
   it should "override value for local host" in {

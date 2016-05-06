@@ -38,18 +38,10 @@ class ConsulApiImplDefault() {
       Put(url.toString).
       bodyString(if(value == null) "" else value, ContentType.APPLICATION_JSON).
       execute().returnContent()
-
-    /*client.
-      preparePut(url.toString).
-      setBody(value).
-      execute().get(15, TimeUnit.SECONDS)
-      */
   }
 
   /** Template http request. Polling and blocking requests are created on top of this one */
   private def keyRequest(configRootPath: String) = {
-    //client.prepareGet(new URL(kvUrl, configRootPath).toString)
-    //Request.Get(new URL(kvUrl, configRootPath).toString)
     new URIBuilder(new URL(kvUrl, configRootPath).toString)
   }
 
@@ -58,21 +50,15 @@ class ConsulApiImplDefault() {
       addParameters(consulQueryParams).
       build()
 
-    Request.Get(url).execute().returnContent().asString()
     val response = Request.Get(url).execute().returnResponse()
-    val content = EntityUtils.toString(response.getEntity)
-    index = response.getLastHeader("X-Consul-Index").getValue.toLong
-    val keys = if(content == null || content.length == 0) Array[ConsulKey]() else mapper.readValue(content, classOf[Array[ConsulKey]])
-    keys
-
-    /*val response = keyRequest(configRootPath).
-      addQueryParams(consulQueryParams).
-      execute().get(30, TimeUnit.SECONDS)
-    val content = response.getResponseBody
-    val keys = if(content == null || content.length == 0) Array[ConsulKey]() else mapper.readValue(content, classOf[Array[ConsulKey]])
-    index = response.getHeader("X-Consul-Index").toLong
-    keys
-    */
+    if(response.getStatusLine.getStatusCode == 404) {
+      Array[ConsulKey]()
+    } else {
+      val content = EntityUtils.toString(response.getEntity)
+      index = response.getLastHeader("X-Consul-Index").getValue.toLong
+      val keys = if (content == null || content.length == 0) Array[ConsulKey]() else mapper.readValue(content, classOf[Array[ConsulKey]])
+      keys
+    }
   }
 
   def pollingRead(configRootPath: String) = {
@@ -83,20 +69,12 @@ class ConsulApiImplDefault() {
 
     val response = Request.Get(url).execute().returnResponse()
     val content = EntityUtils.toString(response.getEntity)
-    val keys = mapper.readValue(content, classOf[Array[ConsulKey]])
-    index = response.getLastHeader("X-Consul-Index").getValue.toLong
-    keys
-
-    /*val request = keyRequest(configRootPath).
-      addQueryParam("index", index.toString).
-      addQueryParams(consulQueryParams)
-
-    val response = request.execute().get()
-
-    val content = response.getResponseBody
-    val keys = mapper.readValue(content, classOf[Array[ConsulKey]])
-    index = response.getHeader("X-Consul-Index").toLong
-    client.close()
-    keys*/
+    if(content == null || content == "") {
+      null
+    } else {
+      val keys = mapper.readValue(content, classOf[Array[ConsulKey]])
+      index = response.getLastHeader("X-Consul-Index").getValue.toLong
+      keys
+    }
   }
 }
