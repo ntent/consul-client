@@ -20,7 +20,7 @@ import scala.collection.JavaConversions._
   * Created by vchekan on 2/11/2016.
   */
 class ConsulApiImplDefault() {
-  val mapper = (new ObjectMapper() with ScalaObjectMapper).registerModule(DefaultScalaModule)
+  val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
   var index: Long = 0L
 
   private val appSettings = ConfigFactory.load()
@@ -46,9 +46,9 @@ class ConsulApiImplDefault() {
   }
 
   def read(configRootPath: String) = {
-    val url = keyRequest(configRootPath).
-      addParameters(consulQueryParams).
-      build()
+    val builder = keyRequest(configRootPath)
+    consulQueryParams.foreach(nvp => builder.addParameter(nvp.getName,nvp.getValue))
+    val url = builder.build()
 
     val response = Request.Get(url).execute().returnResponse()
     if(response.getStatusLine.getStatusCode == 404) {
@@ -62,10 +62,12 @@ class ConsulApiImplDefault() {
   }
 
   def pollingRead(configRootPath: String) = {
-    val url = keyRequest(configRootPath).
-      addParameter("index", index.toString).
-      addParameters(consulQueryParams).
-      build()
+    val builder = keyRequest(configRootPath).
+      addParameter("index", index.toString)
+
+    consulQueryParams.foreach(nvp => builder.addParameter(nvp.getName,nvp.getValue))
+
+    val url = builder.build()
 
     val response = Request.Get(url).execute().returnResponse()
     val content = EntityUtils.toString(response.getEntity)

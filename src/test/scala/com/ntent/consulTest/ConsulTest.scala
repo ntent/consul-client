@@ -7,17 +7,20 @@ import java.util.concurrent.TimeoutException
 import com.ntent.configuration.{ConsulApiImplDefault, Dconfig}
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
+import org.junit.runner.RunWith
 import org.scalatest._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
 import scala.sys.process._
 import scala.concurrent.ExecutionContext.Implicits.global
+import org.scalatest.junit.JUnitRunner
 
 
 /**
   * Created by vchekan on 2/3/2016.
   */
+@RunWith(classOf[JUnitRunner])
 class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
   val rootFolder = "test/app1"
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")

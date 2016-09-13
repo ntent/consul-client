@@ -5,6 +5,7 @@ import rx.lang.scala.{Observable, Subject}
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
@@ -135,13 +136,14 @@ object Dconfig {
 }
 
 // Do NOT make it inner class, because serialization (at least jackson) will fail to create instance of object
+
 case class ConsulKey(
-  val CreateIndex: Long,
-  val ModifyIndex: Long,
-  val LockIndex: Long,
-  val Key: String,
-  val Flags: Long,
-  val Value: String
+@JsonProperty("CreateIndex") CreateIndex: Long,
+@JsonProperty("ModifyIndex") ModifyIndex: Long,
+@JsonProperty("LockIndex") LockIndex: Long,
+@JsonProperty("Key") Key: String,
+@JsonProperty("Flags") Flags: Long,
+@JsonProperty("Value") Value: String
 ) {
   def this(kv: (String,String)) = this(0L, 0L, 0L, kv._1, 0L,
     if(kv._2 == null) "" else Base64.encodeBase64String(StandardCharsets.UTF_8.encode(kv._2).array()))
