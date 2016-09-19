@@ -46,13 +46,14 @@ if(rootProject.hasProperty("teamcity")) {
     }
 } else {
     version = '1.0.0-SNAPSHOT'
+    if(project.hasProperty('mavenUser')) {
     publishing {repositories {maven {
         credentials {
             username mavenUser
             password mavenPassword
         }
         url "http://nexus.cb.ntent.com/nexus/content/repositories/snapshots/"
-    }}}
+    }}}}
 }
 
 dependencies {
