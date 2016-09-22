@@ -15,10 +15,10 @@ import scala.concurrent.blocking
 /**
   * Created by vchekan on 2/3/2016.
   */
-class Dconfig() extends StrictLogging {
+class Dconfig(rootPath: String) extends StrictLogging {
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
-  lazy val configRootPath = appSettings.getString("dconfig.consul.configRoot").stripMargin('/') + '/'
+  lazy val configRootPath = rootPath
   lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
 
@@ -31,6 +31,10 @@ class Dconfig() extends StrictLogging {
   private val readingLoopTask = startReadingLoop()
 
   private lazy val events = Subject[(String,String)]()
+
+  def this() {
+    this(ConfigFactory.load().getString("dconfig.consul.configRoot").stripMargin('/') + '/')
+  }
 
   /** Return (value, namespace) */
   def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
@@ -45,6 +49,14 @@ class Dconfig() extends StrictLogging {
       s = settings.get(path)
       if(s.isDefined)
     } yield (s.get, ns)).headOption
+  }
+
+  def getKeysFrom(namespace: String): Set[String] = {
+    val path = "/" + configRootPath + "/" + namespace + "/"
+    for {
+      key <- settings.keySet
+      if(key.startsWith(path))
+      } yield (key)
   }
 
   def liveUpdate(key: String, namespaces: String*): Observable[String] = {

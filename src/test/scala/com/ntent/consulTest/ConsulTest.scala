@@ -178,6 +178,20 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     assert(got == value)
   }
 
+  it should "return keys for provided root" in {
+    val customRoot = "Markets"
+    val api = new ConsulApiImplDefault
+    val markets = Set("Guam", "Kazakhstan", "Arizona")
+    for (market <- markets) {
+      api.put(rootFolder, s"$customRoot/$market", s"$market whitelist")
+    }
+    Thread.sleep(5000)
+    val dc = new Dconfig(rootFolder + "/" + customRoot)
+
+    val marketSet = dc.getKeysFrom(customRoot)
+    assert(marketSet == markets)
+  }
+
   /*it should "not leak threads" in {
     val dc = Dconfig()
     Thread.sleep(5000000)
