@@ -58,7 +58,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     for {
       key <- settings.keySet
       if key.startsWith(path)
-      } yield key.substring(path.length)
+      } yield key.substring(path.length, key.indexOf("/", path.length +1))
   }
 
   def liveUpdate(key: String, namespaces: String*): Observable[String] = {

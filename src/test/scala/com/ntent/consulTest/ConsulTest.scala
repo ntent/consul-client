@@ -183,8 +183,9 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     val api = new ConsulApiImplDefault
     val markets = Set("Guam", "Kazakhstan", "Arizona")
     for (market <- markets) {
-      api.put(rootFolder, s"$customRoot/$market", s"$market whitelist")
+      api.put(rootFolder, s"$customRoot/$market/$market.whitelist", s"$market whitelist")
     }
+    api.put(rootFolder, s"$customRoot/testFolder/", null)
     Thread.sleep(5000)
     val dc = new Dconfig(rootFolder)
 
