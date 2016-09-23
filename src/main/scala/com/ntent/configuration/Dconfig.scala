@@ -15,15 +15,17 @@ import scala.concurrent.blocking
 /**
   * Created by vchekan on 2/3/2016.
   */
-class Dconfig(rootPath: String) extends StrictLogging {
+class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   lazy val configRootPath = rootPath
   lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
-
-  // incoming list is from least to most specific, but we want to check most specific first
-  private val defaultKeyStores = expandAndReverseNamespaces()
+  private var defaultKeyStores = defKeyStores.reverse
+  if(defaultKeyStores.length == 0) {
+    // incoming list is from least to most specific, but we want to check most specific first
+    defaultKeyStores = expandAndReverseNamespaces()
+  }
   val keystores = defaultKeyStores.reverse
 
   private var settings = initialRead()
@@ -51,12 +53,12 @@ class Dconfig(rootPath: String) extends StrictLogging {
     } yield (s.get, ns)).headOption
   }
 
-  def getKeysFrom(namespace: String): Set[String] = {
+  def getChildren(namespace: String): Set[String] = {
     val path = "/" + configRootPath + "/" + namespace + "/"
     for {
       key <- settings.keySet
-      if(key.startsWith(path))
-      } yield (key)
+      if key.startsWith(path)
+      } yield key.substring(path.length)
   }
 
   def liveUpdate(key: String, namespaces: String*): Observable[String] = {
@@ -136,7 +138,7 @@ class Dconfig(rootPath: String) extends StrictLogging {
     newSettings
   }
 
-  private def expandAndReverseNamespaces() = {
+  private def expandAndReverseNamespaces(): Array[String] = {
     appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|").map(_.trim).
       reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
   }

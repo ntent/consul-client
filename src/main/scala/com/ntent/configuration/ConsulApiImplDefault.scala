@@ -27,7 +27,7 @@ class ConsulApiImplDefault() {
   private val kvUrl = new URL(new URL(appSettings.getString("dconfig.consul.url")), "v1/kv/")
 
   private lazy val consulQueryParams = Map(
-    "seperator" -> "/",
+    "separator" -> "/",
     "recurse" -> "").
     map(p => new BasicNameValuePair(p._1, p._2)).toList
 
