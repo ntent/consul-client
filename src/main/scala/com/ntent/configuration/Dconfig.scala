@@ -4,11 +4,13 @@ import com.typesafe.scalalogging.slf4j.StrictLogging
 import rx.lang.scala.{Observable, Subject}
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
+import java.util
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.blocking
 
@@ -21,10 +23,11 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   lazy val configRootPath = rootPath
   lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
-  private var defaultKeyStores = defKeyStores.reverse
-  if(defaultKeyStores.length == 0) {
-    // incoming list is from least to most specific, but we want to check most specific first
-    defaultKeyStores = expandAndReverseNamespaces()
+  private var defaultKeyStores = defKeyStores
+  if(defKeyStores.length > 0) {
+    defaultKeyStores = expandAndReverseNamespaces(defKeyStores.toArray)
+  } else {
+    defaultKeyStores = expandAndReverseNamespaces(appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|"))
   }
   val keystores = defaultKeyStores.reverse
 
@@ -53,12 +56,19 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     } yield (s.get, ns)).headOption
   }
 
-  def getChildren(namespace: String): Set[String] = {
+  def getChildContainers(namespace: String): Set[String] = {
     val path = "/" + configRootPath + "/" + namespace + "/"
     for {
       key <- settings.keySet
-      if key.startsWith(path)
-      } yield key.substring(path.length, key.indexOf("/", path.length +1))
+      if (key.startsWith(path) && getContainerName(key, path).isDefined)
+        container <- getContainerName(key, path)
+    } yield container
+  }
+
+  def getContainerName(key: String, rootPath: String): Option[String] = {
+    if(key.indexOf("/", rootPath.length + 1) > 0)
+      Some(key.substring(rootPath.length, key.indexOf("/", rootPath.length + 1)))
+    else None
   }
 
   def liveUpdate(key: String, namespaces: String*): Observable[String] = {
@@ -138,9 +148,8 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     newSettings
   }
 
-  private def expandAndReverseNamespaces(): Array[String] = {
-    appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|").map(_.trim).
-      reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
+  private def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {
+    nameSpaces.map(_.trim).reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
   }
 }
 

@@ -185,12 +185,23 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     for (market <- markets) {
       api.put(rootFolder, s"$customRoot/$market/$market.whitelist", s"$market whitelist")
     }
+    api.put(rootFolder, s"$customRoot/foo", "random value")
     api.put(rootFolder, s"$customRoot/testFolder/", null)
     Thread.sleep(5000)
     val dc = new Dconfig(rootFolder)
 
-    val marketSet = dc.getChildren(customRoot)
+    val marketSet = dc.getChildContainers(customRoot)
     assert(marketSet == markets)
+  }
+
+  it should "not return containers more than one level down" in {
+    val customRoot = "MarketConfig/markets"
+    val api = new ConsulApiImplDefault
+    api.put(rootFolder, s"$customRoot/Fake/tooFar/tooFarKey", "foo")
+    Thread.sleep(5000)
+    val dc = new Dconfig(rootFolder)
+    val marketSet = dc.getChildContainers(customRoot)
+    assert (marketSet.contains("Fake") && !marketSet.contains("tooFar"))
   }
 
   /*it should "not leak threads" in {
