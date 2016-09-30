@@ -190,7 +190,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     Thread.sleep(5000)
     val dc = new Dconfig(rootFolder)
 
-    val marketSet = dc.getChildContainers(customRoot)
+    val marketSet = dc.getChildContainersAt(customRoot)
     assert(marketSet == markets)
   }
 
@@ -200,7 +200,7 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     api.put(rootFolder, s"$customRoot/Fake/tooFar/tooFarKey", "foo")
     Thread.sleep(5000)
     val dc = new Dconfig(rootFolder)
-    val marketSet = dc.getChildContainers(customRoot)
+    val marketSet = dc.getChildContainersAt(customRoot)
     assert (marketSet.contains("Fake") && !marketSet.contains("tooFar"))
   }
 

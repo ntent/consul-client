@@ -4,13 +4,11 @@ import com.typesafe.scalalogging.slf4j.StrictLogging
 import rx.lang.scala.{Observable, Subject}
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
-import java.util
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.blocking
 
@@ -56,16 +54,25 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     } yield (s.get, ns)).headOption
   }
 
-  def getChildContainers(namespace: String): Set[String] = {
+  def getChildContainers(): Set[String] = {
+    val path = "/" + configRootPath + "/"
+    getChildContainers(path)
+  }
+
+  def getChildContainersAt(namespace: String): Set[String] = {
     val path = "/" + configRootPath + "/" + namespace + "/"
-    for {
+    getChildContainers(path)
+  }
+
+  private def getChildContainers(path: String): Set[String] = {
+     for {
       key <- settings.keySet
       if (key.startsWith(path) && getContainerName(key, path).isDefined)
         container <- getContainerName(key, path)
     } yield container
   }
 
-  def getContainerName(key: String, rootPath: String): Option[String] = {
+  private def getContainerName(key: String, rootPath: String): Option[String] = {
     if(key.indexOf("/", rootPath.length + 1) > 0)
       Some(key.substring(rootPath.length, key.indexOf("/", rootPath.length + 1)))
     else None
