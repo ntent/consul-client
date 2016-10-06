@@ -18,7 +18,8 @@ import scala.concurrent.blocking
 class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
-  lazy val configRootPath = rootPath
+  //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
+  lazy val configRootPath = rootPath.stripMargin('/').stripSuffix("/") + '/'
   lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
   private var defaultKeyStores = defKeyStores
@@ -55,12 +56,12 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   }
 
   def getChildContainers(): Set[String] = {
-    val path = "/" + configRootPath + "/"
+    val path = "/" + configRootPath
     getChildContainers(path)
   }
 
   def getChildContainersAt(namespace: String): Set[String] = {
-    val path = "/" + configRootPath + "/" + namespace + "/"
+    val path = "/" + configRootPath + namespace + "/"
     getChildContainers(path)
   }
 
