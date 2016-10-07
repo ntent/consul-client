@@ -121,7 +121,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
               if (cause.isInstanceOf[java.util.concurrent.TimeoutException]) {
                 /* long poll timeout, keep going */
               }
-              else if(cause.isInstanceOf[org.apache.http.conn.HttpHostConnectException]) {
+              else if(cause.isInstanceOf[java.net.ConnectException]) {
                 //Connection refused.  stop
                 done = true
               }
