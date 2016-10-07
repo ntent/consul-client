@@ -20,7 +20,6 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
   lazy val configRootPath = rootPath.stripMargin('/').stripSuffix("/") + '/'
-  lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
   private var defaultKeyStores = defKeyStores
   if(defKeyStores.length > 0) {
@@ -80,7 +79,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   }
 
   def liveUpdate(key: String, namespaces: String*): Observable[String] = {
-    val trackingPaths = (for(ns <- (namespaces.reverse ++ defaultKeyStores))
+    var trackingPaths = Set("/" + configRootPath + key)
+    if(defaultKeyStores.nonEmpty)
+     trackingPaths = (for(ns <- (namespaces.reverse ++ defaultKeyStores))
       yield "/" + configRootPath + ns + "/" + key
       ).toSet
 
@@ -119,6 +120,10 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
               val cause = e.getCause
               if (cause.isInstanceOf[java.util.concurrent.TimeoutException]) {
                 /* long poll timeout, keep going */
+              }
+              else if(cause.isInstanceOf[org.apache.http.conn.HttpHostConnectException]) {
+                //Connection refused.  stop
+                done = true
               }
               else {
                 logger.info("Error in property fetching loop", e)
