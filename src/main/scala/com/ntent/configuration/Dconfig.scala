@@ -6,7 +6,6 @@ import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.sun.javaws.exceptions.InvalidArgumentException
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
