@@ -61,6 +61,11 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
   val devSettings = Seq(
     "key1" -> "value1",
     "key2" -> "value2",
+    "intKey" -> "1",
+    "longKey" -> "4611686018427387903",
+    "trueBoolKey" -> "true",
+    "falseBoolKey" -> "false",
+    "doubleKey" -> "1.234",
     "folder1/" -> null,
     "folder1/key1" -> "folder value1"
   )
@@ -77,6 +82,22 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     val dc = new Dconfig()
     val res = dc.get("key1")
     assert(res == "value1")
+  }
+
+  it should "convert known datatypes correctly" in {
+    System.setProperty("dconfig.consul.keyStores", "dev {host}")
+    try {
+      ConfigFactory.invalidateCaches()
+      val dc = new Dconfig()
+      assert(dc.getAs[Int]("intKey") == 1)
+      assert(dc.getAs[Long]("longKey") == 4611686018427387903L)
+      assert(dc.getAs[Boolean]("trueBoolKey"))
+      assert(!dc.getAs[Boolean]("falseBoolKey"))
+      assert(dc.getAs[Double]("doubleKey") == 1.234)
+    } finally {
+      System.clearProperty("dconfig.consul.keyStores")
+    }
+
   }
 
   it should "select right value if key defined in 2 namespaces" in {

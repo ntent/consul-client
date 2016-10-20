@@ -6,11 +6,13 @@ import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.sun.javaws.exceptions.InvalidArgumentException
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.blocking
+import scala.reflect.runtime.universe._
 
 /**
   * Created by vchekan on 2/3/2016.
@@ -43,6 +45,22 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
 
   def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._1
+
+  def getAs[T : TypeTag](key:String): T = {
+    convert[T](get(key))
+  }
+
+  def convert[T : TypeTag](value:String):T = {
+    typeOf[T] match {
+      case t if t =:= typeOf[String] => value.asInstanceOf[T]
+      case t if t =:= typeOf[Int] => value.toInt.asInstanceOf[T]
+      case t if t =:= typeOf[Long] => value.toLong.asInstanceOf[T]
+      case t if t =:= typeOf[Double] => value.toDouble.asInstanceOf[T]
+      case t if t =:= typeOf[Boolean] => value.toBoolean.asInstanceOf[T]
+      case t if t =:= typeOf[Byte] => value.toByte.asInstanceOf[T]
+      case _ => throw new IllegalArgumentException("Cannot convert to type " + typeOf[T].toString)
+    }
+  }
 
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
