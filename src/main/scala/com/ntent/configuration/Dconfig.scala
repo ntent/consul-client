@@ -95,13 +95,17 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     else None
   }
 
-  def liveUpdate(key: String, namespaces: String*): Observable[String] = {
-    var trackingPaths = Set("/" + configRootPath + key)
-    if(defaultKeyStores.nonEmpty)
-     trackingPaths = (for(ns <- (namespaces.reverse ++ defaultKeyStores))
-      yield "/" + configRootPath + ns + "/" + key
-      ).toSet
+  def liveUpdate(): Observable[String] = {
+    liveUpdate(Set(configRootPath))
+  }
 
+  def liveUpdate(key: String, namespaces: String*): Observable[String] = {
+    liveUpdate((for(ns <- (namespaces.reverse ++ defaultKeyStores))
+      yield "/" + configRootPath + ns + "/" + key
+      ).toSet)
+  }
+
+  private def liveUpdate(trackingPaths: Set[String]): Observable[String] = {
     logger.info(s"listening to paths: ${trackingPaths}")
 
     events.withFilter(kv => {
