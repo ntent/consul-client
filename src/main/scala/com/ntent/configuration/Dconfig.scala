@@ -49,13 +49,21 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     convert[T](get(key))
   }
 
+  def getList[T : TypeTag](key:String, delimiter:String = ","):List[T] = {
+    val value = get(key)
+    (for{
+      v <- value.split(delimiter)
+      cv = convert[T](v)
+    } yield cv).toList
+  }
+
   def convert[T : TypeTag](value:String):T = {
     typeOf[T] match {
       case t if t =:= typeOf[String] => value.asInstanceOf[T]
       case t if t =:= typeOf[Int] => value.toInt.asInstanceOf[T]
       case t if t =:= typeOf[Long] => value.toLong.asInstanceOf[T]
       case t if t =:= typeOf[Double] => value.toDouble.asInstanceOf[T]
-      case t if t =:= typeOf[Boolean] => value.toBoolean.asInstanceOf[T]
+      case t if t =:= typeOf[Boolean] => value.toBoolean.asInstanceOf[T] //doesn't work with 0/1
       case t if t =:= typeOf[Byte] => value.toByte.asInstanceOf[T]
       case _ => throw new IllegalArgumentException("Cannot convert to type " + typeOf[T].toString)
     }
