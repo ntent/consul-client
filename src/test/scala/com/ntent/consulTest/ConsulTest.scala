@@ -21,7 +21,7 @@ import org.scalatest.junit.JUnitRunner
   * Created by vchekan on 2/3/2016.
   */
 @RunWith(classOf[JUnitRunner])
-class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
+class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
   val rootFolder = "test/app1"
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
   System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
@@ -75,13 +75,10 @@ class ConsulTest extends FlatSpec with ShouldMatchers with OneInstancePerTest wi
     "key2" -> "value2 override"
   )
 
-  val host = java.net.InetAddress.getLocalHost.getHostName
-  val localSettings = Seq(s"$rootFolder/${host}/key1" -> "local value")
-
   "Consul" should "list keys under root" in {
-    val dc = new Dconfig()
-    val res = dc.get("key1")
-    assert(res == "value1")
+      val dc = new Dconfig()
+      val res = dc.get("key1")
+      assert(res == "value1")
   }
 
   it should "convert known datatypes correctly" in {
