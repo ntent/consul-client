@@ -185,7 +185,8 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
       events.onNext(kv)
       logger.info(s"Rebuild: $kv")
     })
-    logger.debug(s"Refreshed at index: ${consulApi.index}")
+    logger.info(s"Refreshed at index: ${consulApi.index}")
+    logger.info(s"Default Keystores for Env $env is ($defaultKeyStores)")
 
     newSettings
   }
