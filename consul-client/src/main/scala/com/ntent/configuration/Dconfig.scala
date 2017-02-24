@@ -21,6 +21,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
   lazy val configRootPath = rootPath.stripMargin('/').stripSuffix("/") + '/'
+  lazy val env = appSettings.getString("ntent.env")
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
   private var defaultKeyStores = defKeyStores
   if(defKeyStores.length > 0) {
