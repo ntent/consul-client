@@ -16,7 +16,7 @@ import scala.reflect.runtime.universe._
 /**
   * Created by vchekan on 2/3/2016.
   */
-class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
+class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging with ConfigSettings {
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
@@ -41,15 +41,15 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
   }
 
   /** Return (value, namespace) */
-  def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
+  override def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
 
-  def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._1
+  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._1
 
-  def getAs[T : TypeTag](key:String): T = {
+  override def getAs[T : TypeTag](key:String): T = {
     convert[T](get(key))
   }
 
-  def getList[T : TypeTag](key:String, delimiter:String = ","):List[T] = {
+  override def getList[T : TypeTag](key:String, delimiter:String = ","):List[T] = {
     val value = get(key)
     (for{
       v <- value.split(delimiter)
@@ -57,7 +57,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     } yield cv).toList
   }
 
-  def convert[T : TypeTag](value:String):T = {
+  override def convert[T : TypeTag](value:String):T = {
     typeOf[T] match {
       case t if t =:= typeOf[String] => value.asInstanceOf[T]
       case t if t =:= typeOf[Int] => value.toInt.asInstanceOf[T]
@@ -69,7 +69,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     }
   }
 
-  def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
+  override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     (for {
       ns <- allNamespaces
@@ -79,21 +79,21 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     } yield (s.get, ns)).headOption
   }
 
-  def getChildContainers(): Set[String] = {
+  override def getChildContainers(): Set[String] = {
     val path = "/" + configRootPath
     getChildContainers(path)
   }
 
-  def getChildContainersAt(namespace: String): Set[String] = {
+  override def getChildContainersAt(namespace: String): Set[String] = {
     val path = "/" + configRootPath + namespace + "/"
     getChildContainers(path)
   }
 
   private def getChildContainers(path: String): Set[String] = {
-     for {
+    for {
       key <- settings.keySet
       if (key.startsWith(path) && getContainerName(key, path).isDefined)
-        container <- getContainerName(key, path)
+      container <- getContainerName(key, path)
     } yield container
   }
 
@@ -103,11 +103,11 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
     else None
   }
 
-  def liveUpdate(): Observable[String] = {
+  override def liveUpdate(): Observable[String] = {
     liveUpdate(Set(configRootPath))
   }
 
-  def liveUpdate(key: String, namespaces: String*): Observable[String] = {
+  override def liveUpdate(key: String, namespaces: String*): Observable[String] = {
     liveUpdate((for(ns <- (namespaces.reverse ++ defaultKeyStores))
       yield "/" + configRootPath + ns + "/" + key
       ).toSet)
@@ -197,7 +197,14 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging {
 }
 
 object Dconfig {
-  private lazy val instance = new Dconfig()
+  private lazy val instance: ConfigSettings = stub.getOrElse(new Dconfig())
+  private var stub: Option[ConfigSettings] = None
+
+  // add check for instance already created
+  def stub(s: ConfigSettings): Unit = {
+    stub = Some(s)
+  }
+
   def apply() = instance
 }
 

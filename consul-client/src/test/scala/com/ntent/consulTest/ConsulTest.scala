@@ -9,12 +9,12 @@ import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
 import org.junit.runner.RunWith
 import org.scalatest._
+import org.scalatest.junit.JUnitRunner
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
 import scala.sys.process._
-import scala.concurrent.ExecutionContext.Implicits.global
-import org.scalatest.junit.JUnitRunner
 
 
 /**
@@ -185,7 +185,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   }
 
   it should "override value for local host" in {
-    val dc = new Dconfig
+    val dc = new Dconfig()
     val api = new ConsulApiImplDefault
     val host = InetAddress.getLocalHost.getHostName
     val value = "local value"
