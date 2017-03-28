@@ -10,8 +10,9 @@ import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.blocking
+import scala.concurrent.{Future, Promise, blocking}
 import scala.reflect.runtime.universe._
+import scala.util.Success
 
 /**
   * Created by vchekan on 2/3/2016.
@@ -30,20 +31,30 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
   val keystores = defaultKeyStores.reverse
 
-  private var settings = initialRead()
+  private var settings:Map[String,String] = _
+  initialRead()
 
-  private val readingLoopTask = startReadingLoop()
+  private val readingLoopTask = Promise[Boolean]
+  startReadingLoop(readingLoopTask.future)
 
   private lazy val events = Subject[(String,String)]()
+  private lazy val distictChanges = events.groupBy(kv=>kv._1).flatMap(kv=>kv._2.distinctUntilChanged)
 
   def this() {
     this(ConfigFactory.load().getString("dconfig.consul.configRoot").stripMargin('/') + '/')
   }
 
-  /** Return (value, namespace) */
-  override def getWithNamespace(key: String): Option[(String,String)] = get(key, true)
+  private[configuration] def close() = {
+    events.onCompleted()
+    readingLoopTask.complete(Success(true))
+  }
 
-  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._1
+  private def ensureOpen() = {
+    if (readingLoopTask.isCompleted)
+      throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
+  }
+
+  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._2
 
   override def getAs[T : TypeTag](key:String): T = {
     convert[T](get(key))
@@ -70,13 +81,14 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
 
   override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
+    ensureOpen()
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     (for {
       ns <- allNamespaces
       path = "/" + configRootPath + ns + "/" + key
       s = settings.get(path)
       if(s.isDefined)
-    } yield (s.get, ns)).headOption
+    } yield (ns + "/" + key, s.get)).headOption
   }
 
   override def getChildContainers(): Set[String] = {
@@ -90,6 +102,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
 
   private def getChildContainers(path: String): Set[String] = {
+    ensureOpen()
     for {
       key <- settings.keySet
       if (key.startsWith(path) && getContainerName(key, path).isDefined)
@@ -103,28 +116,48 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     else None
   }
 
-  override def liveUpdate(): Observable[String] = {
-    liveUpdate(Set(configRootPath))
+  override def liveUpdateAll(): Observable[(String,String)] = {
+    liveUpdateFolder("")
   }
 
-  override def liveUpdate(key: String, namespaces: String*): Observable[String] = {
-    liveUpdate((for(ns <- (namespaces.reverse ++ defaultKeyStores))
+  override def liveUpdateFolder(folder: String): Observable[(String,String)] = {
+    var folderWithRoot = s"/$configRootPath$folder"
+    if (!folderWithRoot.endsWith("/")) folderWithRoot += "/"
+
+    ensureOpen()
+    val uniqueChanges = distictChanges
+    // only changes that are a sub-path of the given folder.
+    uniqueChanges.withFilter(kv => kv._1.startsWith(folderWithRoot))
+      .map(kv=>kv)
+  }
+
+  override def liveUpdate(key: String, namespaces: String*): Observable[(String,String)] = {
+    liveUpdate(key,true, namespaces:_*)
+  }
+
+  override def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[(String,String)] = {
+    ensureOpen()
+    val keyStores = if (useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
+    val trackingPaths: Set[String] = (for (ns <- keyStores)
       yield "/" + configRootPath + ns + "/" + key
-      ).toSet)
-  }
+      ).toSet
 
-  private def liveUpdate(trackingPaths: Set[String]): Observable[String] = {
-    logger.info(s"listening to paths: ${trackingPaths}")
+    logger.info(s"listening to paths: $trackingPaths")
 
-    events.withFilter(kv => {
+    // group by key and perform a distinctUntilChanged on each observable within the key
+    val uniqueChanges = distictChanges
+
+    uniqueChanges.withFilter(kv => {
       val res = trackingPaths.contains(kv._1)
       if(res)
-        logger.info(s"Live path '${trackingPaths(kv._1)}' contains '${kv}'. Sending to 'distinct()' filter")
+        logger.info(s"Live path '${trackingPaths(kv._1)}' contains '$kv'. Sending to 'distinct()' filter")
       res
     }).
-      map(_._2).
+      map(kv=> get(key,useDefaultKeystores,namespaces:_*)).
+      withFilter(_.isDefined).
+      map(_.get).
       distinctUntilChanged.
-      doOnNext(v => logger.info(s"Distinct update confing: ${v}")).
+      doOnNext(v => logger.info(s"Distinct update confing: $v")).
       //observeOn(TrampolineScheduler())
       observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
@@ -134,16 +167,15 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     rebuild(keys)
   }
 
-  private def startReadingLoop() = {
+  private def startReadingLoop(cancellation: Future[Boolean]) = {
     scala.concurrent.Future {
       blocking {
-        // TODO: handle shutdown
         var done = false
-        while(!done) {
+        while(!done && !cancellation.isCompleted) {
           try {
             val keys = consulApi.pollingRead(configRootPath)
-            if(keys != null)
-              settings = rebuild(keys)
+            if(keys != null && !cancellation.isCompleted)
+              rebuild(keys)
           } catch {
             case e: java.util.concurrent.ExecutionException => {
               val cause = e.getCause
@@ -181,6 +213,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     } yield ("/"+k.Key, k.decodedValue)).
       toMap
 
+    // assign settings map before processing change events
+    settings = newSettings
+
     newSettings.foreach(kv => {
       events.onNext(kv)
       logger.info(s"Rebuild: $kv")
@@ -188,7 +223,6 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     logger.info(s"Refreshed at index: ${consulApi.index}")
     logger.info(s"Default Keystores are (${defaultKeyStores.mkString(",")})")
 
-    newSettings
   }
 
   private def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {

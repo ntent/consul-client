@@ -1,16 +1,13 @@
-package com.ntent.consulTest
+package com.ntent.configuration
 
 import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.TimeoutException
-
-import com.ntent.configuration.{ConsulApiImplDefault, Dconfig}
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
 import org.junit.runner.RunWith
 import org.scalatest._
 import org.scalatest.junit.JUnitRunner
-
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
@@ -22,20 +19,26 @@ import scala.sys.process._
   */
 @RunWith(classOf[JUnitRunner])
 class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
+  // set up our keystores
   val rootFolder = "test/app1"
+  System.setProperty("dconfig.consul.keyStores","global dev {host}")
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
   System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
 
   var consulProcess: Process = null
 
   override def beforeAll(conf: ConfigMap): Unit = {
+
     val exe = if(System.getProperty("os.name").toLowerCase.contains("windows")) "consul.exe" else "consul"
     consulProcess = Seq("bin/"+exe, "agent", "-advertise", "127.0.0.1", "-config-file", "bin/config.json").run()
     Thread.sleep(8000)
 
     val api = new com.ntent.configuration.ConsulApiImplDefault()
+    api.deleteTree(rootFolder)
+    val ttt = api.read(rootFolder)
     devSettings.foreach(kv => api.put(rootFolder + "/dev", kv._1, kv._2))
     stgSettings.foreach(kv => api.put(rootFolder + "/stg", kv._1, kv._2))
+    globalSettings.foreach(kv=>api.put(rootFolder + "/global", kv._1, kv._2))
   }
 
   override def afterAll(conf: ConfigMap): Unit = {
@@ -43,9 +46,13 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   }
 
   override def beforeEach() = {
-    System.clearProperty("dconfig.consul.keyStores")
+    System.setProperty("dconfig.consul.keyStores","global dev {host}")
     System.setProperty("dconfig.consul.configRoot", rootFolder)
     ConfigFactory.invalidateCaches()
+  }
+
+  override def afterEach(): Unit = {
+    System.clearProperty("dconfig.consul.keyStores")
   }
 
   def cleanup() = {
@@ -58,6 +65,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       FileUtils.deleteDirectory(new File("bin/consul-data"))
   }
 
+  val globalSettings = Seq(
+    "liveKey" -> "global-value",
+    "key2" -> "global-value",
+    "localKey" -> "global-value"
+  )
+
   val devSettings = Seq(
     "key1" -> "value1",
     "key2" -> "value2",
@@ -67,105 +80,181 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     "falseBoolKey" -> "false",
     "doubleKey" -> "1.234",
     "folder1/" -> null,
-    "folder1/key1" -> "folder value1"
+    "folder1/key1" -> "folder value1",
+    "liveKey" -> "dev-value",
+    "localKey" -> "dev-value"
   )
 
   val stgSettings = Seq(
     "key_new" -> "new value",
-    "key2" -> "value2 override"
+    "key2" -> "value2 override",
+    "liveKey" -> "stg-value",
+    "localKey" -> "stg-value"
   )
 
   "Consul" should "list keys under root" in {
-      val dc = new Dconfig()
-      val res = dc.get("key1")
-      assert(res == "value1")
+    val dc = new Dconfig()
+    val res = dc.get("key1")
+    assert(res == "value1")
+    dc.close()
   }
 
   it should "convert known datatypes correctly" in {
-    System.setProperty("dconfig.consul.keyStores", "dev {host}")
-    try {
-      ConfigFactory.invalidateCaches()
-      val dc = new Dconfig()
-      assert(dc.getAs[Int]("intKey") == 1)
-      assert(dc.getAs[Long]("longKey") == 4611686018427387903L)
-      assert(dc.getAs[Boolean]("trueBoolKey"))
-      assert(!dc.getAs[Boolean]("falseBoolKey"))
-      assert(dc.getAs[Double]("doubleKey") == 1.234)
-    } finally {
-      System.clearProperty("dconfig.consul.keyStores")
-    }
-
+    val dc = new Dconfig()
+    assert(dc.getAs[Int]("intKey") == 1)
+    assert(dc.getAs[Long]("longKey") == 4611686018427387903L)
+    assert(dc.getAs[Boolean]("trueBoolKey"))
+    assert(!dc.getAs[Boolean]("falseBoolKey"))
+    assert(dc.getAs[Double]("doubleKey") == 1.234)
+    dc.close()
   }
 
   it should "select right value if key defined in 2 namespaces" in {
-    System.setProperty("dconfig.consul.keyStores", "stg dev {host}")
-    try {
-      ConfigFactory.invalidateCaches()
-      val dc = new Dconfig()
-      val res = dc.get("key2")
-      assert(res == "value2")
-    } finally {
-      System.clearProperty("dconfig.consul.keyStores")
-    }
+    System.setProperty("dconfig.consul.keyStores", "global stg dev {host}")
+    ConfigFactory.invalidateCaches()
+
+    val dc = new Dconfig()
+    val res = dc.get("key2")
+    assert(res == "value2")
+    dc.close()
   }
 
   it should "select right value if key defined in 2 namespaces (reverse order from previous test)" in {
-    // TODO: how to move property update and invalidation out of the test?
     System.setProperty("dconfig.consul.keyStores", "{host} dev stg")
-    try {
-      ConfigFactory.invalidateCaches()
+    ConfigFactory.invalidateCaches()
 
-      val dc = new Dconfig()
-      val res = dc.get("key2")
-      assert(res == "value2 override")
-    } finally {
-      System.clearProperty("dconfig.consul.keyStores")
-    }
+    val dc = new Dconfig()
+    val res = dc.get("key2")
+    assert(res == "value2 override")
+    dc.close()
   }
 
-  it should "execute action when key change (live update)" in {
+  it should "live update only changed value when changed" in {
     val dc = new Dconfig()
-    val p = Promise[String]()
+    val p = Promise[(String,String)]()
 
     dc.liveUpdate("liveKey").
-      subscribe(v => p.trySuccess(v))
+      subscribe(v => {
+        if (p.isCompleted)
+          assert(false,"liveUpdate called more than once for a single key update")
+        else
+          p.trySuccess(v)
+      })
 
     val api = new ConsulApiImplDefault()
     val value = "live value-" + new java.util.Random().nextLong().toString
     api.put(rootFolder, "dev/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res == value)
+    assert(res._1 == "dev/liveKey")
+    assert(res._2 == value)
+    dc.close()
   }
 
-  it should "not trigger keys which were not subscribed to" in {
+  it should "live update custom namespaces" in {
+    val dc = new Dconfig()
+    val p = Promise[(String,String)]()
+
+    dc.liveUpdate("liveKey","custom1","custom2").
+      subscribe(v => {
+        if (p.isCompleted)
+          assert(false,"liveUpdate called more than once for a single key update")
+        else
+          p.trySuccess(v)
+      })
+
+    val api = new ConsulApiImplDefault()
+    val value = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "custom2/liveKey", value)
+
+    val res = Await.result(p.future, Duration(30, "seconds"))
+    assert(res._1 == "custom2/liveKey")
+    assert(res._2 == value)
+    dc.close()
+  }
+
+  it should "not live update when key change in parent namespace" in {
+    val dc = new Dconfig()
+    val p = Promise[(String,String)]
+    val pSecond = Promise[(String,String)]
+
+    dc.liveUpdate("liveKey").
+      subscribe(v => {
+        if (p.isCompleted)
+          pSecond.trySuccess(v)
+        else
+          p.trySuccess(v)
+      })
+
+    val api = new ConsulApiImplDefault()
+    val devValue = "live value-" + new java.util.Random().nextLong().toString
+    val globalValue = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "dev/liveKey", devValue)
+
+    val res = Await.result(p.future, Duration(30, "seconds"))
+    assert(res._2 == devValue)
+
+    // this should complete pSecond if subscription is called a second time.
+    api.put(rootFolder, "global/liveKey", globalValue)
+
+    intercept[TimeoutException] {
+      val res = Await.result(pSecond.future, Duration(4, "seconds"))
+    }
+
+    dc.close()
+  }
+
+  it should "live update when any key change if watching root" in {
+    val dc = new Dconfig()
+    val p = Promise[String]()
+
+    dc.liveUpdateAll().
+      subscribe(v => p.trySuccess(v._2))
+
+    val api = new ConsulApiImplDefault()
+    val value = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "dev/liveKey", value)
+
+    val res = Await.result(p.future, Duration(30, "seconds"))
+
+    dc.close()
+  }
+
+  it should "not live update on keys which were not subscribed to" in {
     val dc = new Dconfig()
     val p = Promise[String]()
 
     dc.liveUpdate("NoSuchSettingsExist").
-      subscribe(v => p.trySuccess(v))
+      subscribe(v => p.trySuccess(v._2))
+
+    val api = new ConsulApiImplDefault()
+    val value = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "dev/liveKey", value)
 
     intercept[TimeoutException] {
       val res = Await.result(p.future, Duration(10, "seconds"))
     }
+    dc.close()
   }
 
-  it should "not trigger live update when same key but different namespace is changed" in {
+  it should "not live update on same key but different namespace" in {
     val dc = new Dconfig()
     val api = new ConsulApiImplDefault()
     val p = Promise[String]()
 
     // Listen in "live" namespace
     dc.liveUpdate("deadKey", "live").
-      subscribe(v => p.trySuccess(v))
+      subscribe(v => p.trySuccess(v._2))
 
     // perform update in 2 seconds in "dead" namespace
-    Future({ Thread.sleep(2000); api.put(rootFolder, "dead/deadKey", "dead update")})
+    val value = "dead update-" + new java.util.Random().nextLong().toString
+    Future({ Thread.sleep(2000); api.put(rootFolder, "dead/deadKey", value)})
 
     intercept[TimeoutException] {
       val res = Await.result(p.future, Duration(10, "seconds"))
       assert(false, s"No result expected but got: '${res}'")
     }
+    dc.close()
   }
 
   it should "return None on non-existing key" in {
@@ -173,6 +262,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     intercept[RuntimeException] {
       val res = dc.get("no-such-key")
     }
+    dc.close()
   }
 
   it should "not throw if root namespace does not exist" in {
@@ -180,20 +270,24 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     System.setProperty("dconfig.consul.keyStores", ns)
     System.setProperty("dconfig.consul.configRoot", rootFolder + "/nosuchroot")
     ConfigFactory.invalidateCaches()
+
     val dc = new Dconfig()
     assert(ns == dc.keystores.mkString(" "))
+    dc.close()
   }
 
   it should "override value for local host" in {
     val dc = new Dconfig()
     val api = new ConsulApiImplDefault
     val host = InetAddress.getLocalHost.getHostName
-    val value = "local value"
-    api.put(rootFolder, s"$host/key1", value)
+    val value = "local value-" + new java.util.Random().nextLong().toString
+    val key = "localKey"
+    api.put(rootFolder, s"$host/$key", value)
 
     Thread.sleep(5000)
-    val got = dc.get("key1")
+    val got = dc.get(key)
     assert(got == value)
+    dc.close()
   }
 
   it should "return keys for provided root" in {
@@ -210,6 +304,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
     val marketSet = dc.getChildContainersAt(customRoot)
     assert(marketSet == markets)
+    dc.close()
   }
 
   it should "not return containers more than one level down" in {
@@ -220,6 +315,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val dc = new Dconfig(rootFolder)
     val marketSet = dc.getChildContainersAt(customRoot)
     assert (marketSet.contains("Fake") && !marketSet.contains("tooFar"))
+    dc.close()
   }
 
   /*it should "not leak threads" in {

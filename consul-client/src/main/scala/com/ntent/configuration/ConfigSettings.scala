@@ -4,9 +4,6 @@ import rx.lang.scala.Observable
 
 trait ConfigSettings {
 
-  /** Return (value, namespace) */
-  def getWithNamespace(key: String): Option[(String, String)]
-
   def get(key: String): String
 
   def getAs[T: _root_.scala.reflect.runtime.universe.TypeTag](key: String): T
@@ -21,7 +18,12 @@ trait ConfigSettings {
 
   def getChildContainersAt(namespace: String): Set[String]
 
-  def liveUpdate(): Observable[String]
+  def liveUpdateAll(): Observable[(String,String)]
 
-  def liveUpdate(key: String, namespaces: String*): Observable[String]
+  def liveUpdateFolder(folder: String): Observable[(String,String)]
+
+  def liveUpdate(key: String, namespaces: String*): Observable[(String,String)]
+
+  def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[(String,String)]
+
 }

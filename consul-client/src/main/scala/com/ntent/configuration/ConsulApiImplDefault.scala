@@ -40,6 +40,17 @@ class ConsulApiImplDefault() {
       execute().returnContent()
   }
 
+  /**
+    * Internal method for unit tests to clean up.
+    * @param dir
+    */
+  private[configuration] def deleteTree(dir: String) = {
+    val url = new URL(kvUrl, dir.stripMargin('/')+ "/?recurse")
+    Request.
+      Delete(url.toString).
+      execute()
+  }
+
   /** Template http request. Polling and blocking requests are created on top of this one */
   private def keyRequest(configRootPath: String) = {
     new URIBuilder(new URL(kvUrl, configRootPath).toString)
