@@ -12,18 +12,18 @@ trait ConfigSettings {
 
   def convert[T: _root_.scala.reflect.runtime.universe.TypeTag](value: String): T
 
-  def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String, String)]
+  def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair]
 
-  def getChildContainers(): Set[String]
+  def getChildContainers: Set[String]
 
   def getChildContainersAt(namespace: String): Set[String]
 
-  def liveUpdateAll(): Observable[(String,String)]
+  def liveUpdateAll(): Observable[KeyValuePair]
 
-  def liveUpdateFolder(folder: String): Observable[(String,String)]
+  def liveUpdateFolder(folder: String): Observable[KeyValuePair]
 
-  def liveUpdate(key: String, namespaces: String*): Observable[(String,String)]
+  def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair]
 
-  def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[(String,String)]
+  def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[KeyValuePair]
 
 }

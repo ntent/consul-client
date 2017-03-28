@@ -131,7 +131,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
   it should "live update only changed value when changed" in {
     val dc = new Dconfig()
-    val p = Promise[(String,String)]()
+    val p = Promise[KeyValuePair]()
+
+    val val1 = KeyValuePair("foo","bar")
+    val val2 = KeyValuePair("foo","bar")
+    assert(val1 == val2)
+    assert(val1.hashCode() == val2.hashCode())
 
     dc.liveUpdate("liveKey").
       subscribe(v => {
@@ -146,14 +151,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "dev/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res._1 == "dev/liveKey")
-    assert(res._2 == value)
+    assert(res.key == "dev/liveKey")
+    assert(res.value == value)
     dc.close()
   }
 
   it should "live update custom namespaces" in {
     val dc = new Dconfig()
-    val p = Promise[(String,String)]()
+    val p = Promise[KeyValuePair]()
 
     dc.liveUpdate("liveKey","custom1","custom2").
       subscribe(v => {
@@ -168,15 +173,15 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "custom2/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res._1 == "custom2/liveKey")
-    assert(res._2 == value)
+    assert(res.key == "custom2/liveKey")
+    assert(res.value == value)
     dc.close()
   }
 
   it should "not live update when key change in parent namespace" in {
     val dc = new Dconfig()
-    val p = Promise[(String,String)]
-    val pSecond = Promise[(String,String)]
+    val p = Promise[KeyValuePair]
+    val pSecond = Promise[KeyValuePair]
 
     dc.liveUpdate("liveKey").
       subscribe(v => {
@@ -192,7 +197,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "dev/liveKey", devValue)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res._2 == devValue)
+    assert(res.value == devValue)
 
     // this should complete pSecond if subscription is called a second time.
     api.put(rootFolder, "global/liveKey", globalValue)
@@ -209,7 +214,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val p = Promise[String]()
 
     dc.liveUpdateAll().
-      subscribe(v => p.trySuccess(v._2))
+      subscribe(v => p.trySuccess(v.value))
 
     val api = new ConsulApiImplDefault()
     val value = "live value-" + new java.util.Random().nextLong().toString
@@ -225,7 +230,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val p = Promise[String]()
 
     dc.liveUpdate("NoSuchSettingsExist").
-      subscribe(v => p.trySuccess(v._2))
+      subscribe(v => p.trySuccess(v.value))
 
     val api = new ConsulApiImplDefault()
     val value = "live value-" + new java.util.Random().nextLong().toString
@@ -244,7 +249,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
     // Listen in "live" namespace
     dc.liveUpdate("deadKey", "live").
-      subscribe(v => p.trySuccess(v._2))
+      subscribe(v => p.trySuccess(v.value))
 
     // perform update in 2 seconds in "dead" namespace
     val value = "dead update-" + new java.util.Random().nextLong().toString

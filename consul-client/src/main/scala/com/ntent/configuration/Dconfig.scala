@@ -37,8 +37,8 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   private val readingLoopTask = Promise[Boolean]
   startReadingLoop(readingLoopTask.future)
 
-  private lazy val events = Subject[(String,String)]()
-  private lazy val distictChanges = events.groupBy(kv=>kv._1).flatMap(kv=>kv._2.distinctUntilChanged)
+  private lazy val events = Subject[KeyValuePair]()
+  private lazy val distictChanges = events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
 
   def this() {
     this(ConfigFactory.load().getString("dconfig.consul.configRoot").stripMargin('/') + '/')
@@ -54,7 +54,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
   }
 
-  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'"))._2
+  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
 
   override def getAs[T : TypeTag](key:String): T = {
     convert[T](get(key))
@@ -80,7 +80,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     }
   }
 
-  override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[(String,String)] = {
+  override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair] = {
     ensureOpen()
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     (for {
@@ -88,10 +88,10 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       path = "/" + configRootPath + ns + "/" + key
       s = settings.get(path)
       if(s.isDefined)
-    } yield (ns + "/" + key, s.get)).headOption
+    } yield KeyValuePair(ns + "/" + key, s.get)).headOption
   }
 
-  override def getChildContainers(): Set[String] = {
+  override def getChildContainers: Set[String] = {
     val path = "/" + configRootPath
     getChildContainers(path)
   }
@@ -116,26 +116,26 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     else None
   }
 
-  override def liveUpdateAll(): Observable[(String,String)] = {
+  override def liveUpdateAll(): Observable[KeyValuePair] = {
     liveUpdateFolder("")
   }
 
-  override def liveUpdateFolder(folder: String): Observable[(String,String)] = {
+  override def liveUpdateFolder(folder: String): Observable[KeyValuePair] = {
     var folderWithRoot = s"/$configRootPath$folder"
     if (!folderWithRoot.endsWith("/")) folderWithRoot += "/"
 
     ensureOpen()
     val uniqueChanges = distictChanges
     // only changes that are a sub-path of the given folder.
-    uniqueChanges.withFilter(kv => kv._1.startsWith(folderWithRoot))
+    uniqueChanges.withFilter(kv => kv.key.startsWith(folderWithRoot))
       .map(kv=>kv)
   }
 
-  override def liveUpdate(key: String, namespaces: String*): Observable[(String,String)] = {
+  override def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair] = {
     liveUpdate(key,true, namespaces:_*)
   }
 
-  override def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[(String,String)] = {
+  override def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[KeyValuePair] = {
     ensureOpen()
     val keyStores = if (useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     val trackingPaths: Set[String] = (for (ns <- keyStores)
@@ -148,9 +148,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     val uniqueChanges = distictChanges
 
     uniqueChanges.withFilter(kv => {
-      val res = trackingPaths.contains(kv._1)
+      val res = trackingPaths.contains(kv.key)
       if(res)
-        logger.info(s"Live path '${trackingPaths(kv._1)}' contains '$kv'. Sending to 'distinct()' filter")
+        logger.debug(s"Tracking paths contains '${kv.key}' with value '${kv.value}'.")
       res
     }).
       map(kv=> get(key,useDefaultKeystores,namespaces:_*)).
@@ -217,12 +217,11 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     settings = newSettings
 
     newSettings.foreach(kv => {
-      events.onNext(kv)
+      events.onNext(KeyValuePair(kv._1,kv._2))
       logger.info(s"Rebuild: $kv")
     })
     logger.info(s"Refreshed at index: ${consulApi.index}")
     logger.info(s"Default Keystores are (${defaultKeyStores.mkString(",")})")
-
   }
 
   private def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {
