@@ -31,14 +31,27 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
   val keystores = defaultKeyStores.reverse
 
-  private var settings:Map[String,String] = _
-  initialRead()
-
-  private val readingLoopTask = Promise[Boolean]
-  startReadingLoop(readingLoopTask.future)
-
-  private lazy val events = Subject[KeyValuePair]()
+  private val events = Subject[KeyValuePair]()
   private lazy val distictChanges = events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
+  private var settings:Map[String,String] = _
+  private val readingLoopTask = Promise[Boolean]
+
+  {
+
+    // initialize a print-out of changes. this subscription doesn't print until there are two entries (a new value changed)
+    // except it does flush when the subscription ends (even if the value never changed)
+    events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,2)).subscribe(kvs => {
+      if (kvs.length == 2)
+        logger.info(s"Changed config: ${kvs.head.key} : ${kvs.head.value} => ${kvs(1).value}")
+    }, e=> logger.error("Error in config change subscription. No longer printing configuration updates.",e))
+
+    initialRead()
+
+    startReadingLoop(readingLoopTask.future)
+
+  }
+
+
 
   def this() {
     this(ConfigFactory.load().getString("dconfig.consul.configRoot").stripMargin('/') + '/')
@@ -157,7 +170,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       withFilter(_.isDefined).
       map(_.get).
       distinctUntilChanged.
-      doOnNext(v => logger.info(s"Distinct update confing: $v")).
+      doOnNext(v => logger.info(s"Watched config updated: ${v.key} : ${v.value}")).
       //observeOn(TrampolineScheduler())
       observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
@@ -165,6 +178,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   private def initialRead() = {
     val keys = consulApi.read(configRootPath)
     rebuild(keys)
+    logger.info(s"Default Keystores are (${defaultKeyStores.mkString(",")})")
+    settings.foreach(kv=>logger.info(s"Loaded config: ${kv._1} : ${kv._2}"))
+
   }
 
   private def startReadingLoop(cancellation: Future[Boolean]) = {
@@ -218,10 +234,8 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     newSettings.foreach(kv => {
       events.onNext(KeyValuePair(kv._1,kv._2))
-      logger.info(s"Rebuild: $kv")
     })
     logger.info(s"Refreshed at index: ${consulApi.index}")
-    logger.info(s"Default Keystores are (${defaultKeyStores.mkString(",")})")
   }
 
   private def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {
