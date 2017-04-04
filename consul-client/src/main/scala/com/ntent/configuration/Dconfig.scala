@@ -40,7 +40,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     // initialize a print-out of changes. this subscription doesn't print until there are two entries (a new value changed)
     // except it does flush when the subscription ends (even if the value never changed)
-    events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,2)).subscribe(kvs => {
+    events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,1)).subscribe(kvs => {
       if (kvs.length == 2)
         logger.info(s"Changed config: ${kvs.head.key} : ${kvs.head.value} => ${kvs(1).value}")
     }, e=> logger.error("Error in config change subscription. No longer printing configuration updates.",e))
