@@ -14,6 +14,8 @@ trait ConfigSettings {
 
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair]
 
+  def getKeyValuesPairsAt(namespace: String): Set[KeyValuePair]
+
   def getChildContainers: Set[String]
 
   def getChildContainersAt(namespace: String): Set[String]

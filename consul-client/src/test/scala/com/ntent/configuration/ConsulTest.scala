@@ -99,6 +99,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
+  it should "list all keys under stg container" in {
+    val dc = new Dconfig()
+    val keyValPairs = dc.getKeyValuesPairsAt("stg")
+    keyValPairs.foreach(p => assert(stgSettings.contains((p.key, p.value))))
+  }
+
   it should "convert known datatypes correctly" in {
     val dc = new Dconfig()
     assert(dc.getAs[Int]("intKey") == 1)

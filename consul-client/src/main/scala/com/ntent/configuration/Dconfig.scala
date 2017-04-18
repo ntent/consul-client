@@ -104,6 +104,11 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     } yield KeyValuePair(ns + "/" + key, s.get)).headOption
   }
 
+  override def getKeyValuesPairsAt(namespace: String): Set[KeyValuePair] = {
+    ensureOpen()
+    settings.filter(p => p._1.startsWith(namespace) && !p._1.endsWith("/")).map(f => new KeyValuePair(f._1, f._2)).toSet
+  }
+
   override def getChildContainers: Set[String] = {
     val path = "/" + configRootPath
     getChildContainers(path)
