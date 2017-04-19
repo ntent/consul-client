@@ -55,7 +55,7 @@ allprojects {
 project(":consul-client_$scalaVersion") {
 
     // PROJECT VERSION
-    set("projectVersion",'1.1.1')
+    set("projectVersion",'1.1.2')
 
     if(rootProject.hasProperty("teamcity")) {
         version = projectVersion + "." + teamcity["build.number"]
