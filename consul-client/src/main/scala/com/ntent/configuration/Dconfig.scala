@@ -21,15 +21,15 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   private val appSettings = ConfigFactory.load()
   private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
-  lazy val configRootPath = rootPath.stripMargin('/').stripSuffix("/") + '/'
+  lazy val configRootPath: String = rootPath.stripMargin('/').stripSuffix("/") + '/'
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
   private var defaultKeyStores = defKeyStores
-  if(defKeyStores.length > 0) {
+  if(defKeyStores.nonEmpty) {
     defaultKeyStores = expandAndReverseNamespaces(defKeyStores.toArray)
   } else {
     defaultKeyStores = expandAndReverseNamespaces(appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|"))
   }
-  val keystores = defaultKeyStores.reverse
+  val keystores: Seq[String] = defaultKeyStores.reverse
 
   private val events = Subject[KeyValuePair]()
   private lazy val distictChanges = events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
@@ -67,7 +67,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
   }
 
-  override def get(key: String): String = get(key, true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
+  override def get(key: String): String = get(key, useDefaultKeystores = true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
 
   override def getAs[T : TypeTag](key:String): T = {
     convert[T](get(key))
@@ -91,18 +91,6 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       case t if t =:= typeOf[Byte] => value.toByte.asInstanceOf[T]
       case _ => throw new IllegalArgumentException("Cannot convert to type " + typeOf[T].toString)
     }
-  }
-
-  override def get(key: String, useDefaultKeystores: Boolean, namespace1: String): Option[KeyValuePair] = {
-    get(key, useDefaultKeystores, namespace1)
-  }
-
-  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String): Option[KeyValuePair] = {
-    get(key, useDefaultKeystores, namespace1, namespace2)
-  }
-
-  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String, namespace3: String): Option[KeyValuePair] = {
-    get(key, useDefaultKeystores, namespace1, namespace2, namespace3)
   }
 
   override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair] = {

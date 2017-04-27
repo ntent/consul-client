@@ -12,12 +12,6 @@ trait ConfigSettings {
 
   def convert[T: _root_.scala.reflect.runtime.universe.TypeTag](value: String): T
 
-  def get(key: String, useDefaultKeystores: Boolean, namespace1: String): Option[KeyValuePair]
-
-  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String): Option[KeyValuePair]
-
-  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String, namespace3: String): Option[KeyValuePair]
-
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair]
 
   def getKeyValuePairsAt(namespace: String): Set[KeyValuePair]
