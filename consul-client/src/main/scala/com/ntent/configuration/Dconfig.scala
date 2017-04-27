@@ -93,6 +93,18 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     }
   }
 
+  override def get(key: String, useDefaultKeystores: Boolean, namespace1: String): Option[KeyValuePair] = {
+    get(key, useDefaultKeystores, namespace1)
+  }
+
+  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String): Option[KeyValuePair] = {
+    get(key, useDefaultKeystores, namespace1, namespace2)
+  }
+
+  def get(key: String, useDefaultKeystores: Boolean, namespace1: String, namespace2: String, namespace3: String): Option[KeyValuePair] = {
+    get(key, useDefaultKeystores, namespace1, namespace2, namespace3)
+  }
+
   override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair] = {
     ensureOpen()
     val allNamespaces = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
@@ -104,9 +116,13 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     } yield KeyValuePair(ns + "/" + key, s.get)).headOption
   }
 
-  override def getKeyValuesPairsAt(namespace: String): Set[KeyValuePair] = {
+  override def getKeyValuePairsAt(namespace: String): Set[KeyValuePair] = {
     ensureOpen()
-    settings.filter(p => p._1.startsWith(namespace) && !p._1.endsWith("/")).map(f => new KeyValuePair(f._1, f._2)).toSet
+    val path = "/" + configRootPath + namespace
+    settings.filter(p => p._1.startsWith(path) && !p._1.endsWith("/")).map(f => {
+      val key = f._1.substring(f._1.lastIndexOf("/") + 1)
+      new KeyValuePair(key, f._2)
+    }).toSet
   }
 
   override def getChildContainers: Set[String] = {

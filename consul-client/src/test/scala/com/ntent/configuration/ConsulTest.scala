@@ -101,7 +101,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
   it should "list all keys under stg container" in {
     val dc = new Dconfig()
-    val keyValPairs = dc.getKeyValuesPairsAt("stg")
+    val keyValPairs = dc.getKeyValuePairsAt("stg")
     keyValPairs.foreach(p => assert(stgSettings.contains((p.key, p.value))))
   }
 
@@ -205,7 +205,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val res = Await.result(p.future, Duration(30, "seconds"))
     assert(res.value == devValue)
 
-    // this should complete pSecond if subscription is called a second time.
+    // this should complete second if subscription is called a second time.
     api.put(rootFolder, "global/liveKey", globalValue)
 
     intercept[TimeoutException] {
