@@ -153,6 +153,37 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       .map(kv=>kv)
   }
 
+  def liveUpdateEffectiveSettings() : Observable[KeyValuePair] = {
+    ensureOpen()
+
+    // distinct will only alert us of changes, but we want to emit all values when first subscribed to.
+    // concatenate the existing keys/values with the upcoming changes.
+    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2)) ++ distictChanges
+
+    // get just the key of the setting names (removing the path data)
+    val res:Observable[KeyValuePair] = for {
+      kv <- ob
+      settingName = extractKeyFromPath(kv.key, defaultKeyStores.toList)
+      value = get(settingName, useDefaultKeystores = true)
+      if value.isDefined
+    } yield KeyValuePair(settingName, value.get.value)
+
+    res.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
+  }
+
+  private def extractKeyFromPath(path:String, namespaces:List[String]):String = {
+    namespaces match {
+      case s :: rest => {
+        val root = "/" + configRootPath + s + "/"
+        if (path.startsWith(root))
+          path.substring(root.length)
+        else
+          extractKeyFromPath(path,rest)
+      }
+      case Nil => path
+    }
+  }
+
   override def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair] = {
     liveUpdate(key,true, namespaces:_*)
   }

@@ -209,7 +209,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "global/liveKey", globalValue)
 
     intercept[TimeoutException] {
-      val res = Await.result(pSecond.future, Duration(4, "seconds"))
+      val res = Await.result(pSecond.future, Duration(3, "seconds"))
     }
 
     dc.close()
@@ -231,6 +231,47 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
+  it should "liveUpdateEffectiveSettings on all keys at start" in {
+    val dc = new Dconfig()
+    var count = 0
+    dc.liveUpdateEffectiveSettings().
+      doOnEach(kv=>Console.println(s"${kv.key} = ${kv.value}")).
+      subscribe(_ => count = count+1)
+    assert(count > 1,"Did not receive more than one updated key!")
+
+    dc.close()
+  }
+
+  it should "liveUpdateEffectiveSettings once with new value when a key is changed" in {
+    val dc = new Dconfig()
+    var liveValue = ""
+    var count = 0
+    dc.liveUpdateEffectiveSettings().
+      filter(kv=>kv.key=="liveKey").
+      doOnEach(kv=>Console.println(s"${kv.key} = ${kv.value}")).
+      subscribe(kv => { count = count+1; liveValue = kv.value })
+
+    assert(liveValue != "","Did not receive initial value for liveKey!")
+    assert(count == 1,s"Did not receive single update for liveKey! (saw $count updates)")
+
+    val api = new ConsulApiImplDefault()
+    var value = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "dev/liveKey", value)
+
+    Thread.sleep(2000)
+    assert(liveValue == value, s"Expected live update to $value but got $liveValue")
+    assert(count == 2,s"Did not receive second update for liveKey! (saw $count updates)")
+
+    value = "live value-" + new java.util.Random().nextLong().toString
+    api.put(rootFolder, "dev/liveKey", value)
+
+    Thread.sleep(2000)
+    assert(liveValue == value, s"Expected live update to $value but got $liveValue")
+    assert(count == 3,s"Did not receive third update for liveKey! (saw $count updates)")
+
+    dc.close()
+  }
+
   it should "not live update on keys which were not subscribed to" in {
     val dc = new Dconfig()
     val p = Promise[String]()
@@ -243,7 +284,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "dev/liveKey", value)
 
     intercept[TimeoutException] {
-      val res = Await.result(p.future, Duration(10, "seconds"))
+      val res = Await.result(p.future, Duration(3, "seconds"))
     }
     dc.close()
   }
@@ -262,7 +303,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     Future({ Thread.sleep(2000); api.put(rootFolder, "dead/deadKey", value)})
 
     intercept[TimeoutException] {
-      val res = Await.result(p.future, Duration(10, "seconds"))
+      val res = Await.result(p.future, Duration(3, "seconds"))
       assert(false, s"No result expected but got: '${res}'")
     }
     dc.close()
@@ -295,7 +336,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val key = "localKey"
     api.put(rootFolder, s"$host/$key", value)
 
-    Thread.sleep(5000)
+    Thread.sleep(2000)
     val got = dc.get(key)
     assert(got == value)
     dc.close()
@@ -310,7 +351,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     }
     api.put(rootFolder, s"$customRoot/foo", "random value")
     api.put(rootFolder, s"$customRoot/testFolder/", null)
-    Thread.sleep(5000)
+    Thread.sleep(2000)
     val dc = new Dconfig(rootFolder)
 
     val marketSet = dc.getChildContainersAt(customRoot)
@@ -322,7 +363,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val customRoot = "MarketConfig/markets"
     val api = new ConsulApiImplDefault
     api.put(rootFolder, s"$customRoot/Fake/tooFar/tooFarKey", "foo")
-    Thread.sleep(5000)
+    Thread.sleep(2000)
     val dc = new Dconfig(rootFolder)
     val marketSet = dc.getChildContainersAt(customRoot)
     assert (marketSet.contains("Fake") && !marketSet.contains("tooFar"))
