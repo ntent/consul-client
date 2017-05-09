@@ -24,6 +24,8 @@ trait ConfigSettings {
 
   def liveUpdateFolder(folder: String): Observable[KeyValuePair]
 
+  def liveUpdateEffectiveSettings(): Observable[KeyValuePair]
+
   def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair]
 
   def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[KeyValuePair]

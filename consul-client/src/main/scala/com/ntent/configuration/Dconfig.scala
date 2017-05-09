@@ -153,7 +153,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       .map(kv=>kv)
   }
 
-  def liveUpdateEffectiveSettings() : Observable[KeyValuePair] = {
+  override def liveUpdateEffectiveSettings() : Observable[KeyValuePair] = {
     ensureOpen()
 
     // distinct will only alert us of changes, but we want to emit all values when first subscribed to.
