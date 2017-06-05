@@ -59,6 +59,7 @@ project(":consul-client_$scalaVersion") {
 
     if(rootProject.hasProperty("teamcity")) {
         version = projectVersion + "." + teamcity["build.number"]
+        println("##teamcity[buildNumber '" + version + "']")
         publishing {
             repositories {
                 maven {
