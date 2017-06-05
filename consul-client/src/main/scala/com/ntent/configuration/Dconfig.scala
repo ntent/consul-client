@@ -11,7 +11,6 @@ import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, blocking}
-import scala.reflect.runtime.universe._
 import scala.util.Success
 
 /**
@@ -19,7 +18,6 @@ import scala.util.Success
   */
 class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging with ConfigSettings {
   private val appSettings = ConfigFactory.load()
-  private val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
   lazy val configRootPath: String = rootPath.stripMargin('/').stripSuffix("/") + '/'
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
@@ -51,8 +49,6 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
   }
 
-
-
   def this() {
     this(ConfigFactory.load().getString("dconfig.consul.configRoot").stripMargin('/') + '/')
   }
@@ -65,32 +61,6 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   private def ensureOpen() = {
     if (readingLoopTask.isCompleted)
       throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
-  }
-
-  override def get(key: String): String = get(key, useDefaultKeystores = true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
-
-  override def getAs[T : TypeTag](key:String): T = {
-    convert[T](get(key))
-  }
-
-  override def getList[T : TypeTag](key:String, delimiter:String = ","):List[T] = {
-    val value = get(key)
-    (for{
-      v <- value.split(delimiter)
-      cv = convert[T](v)
-    } yield cv).toList
-  }
-
-  override def convert[T : TypeTag](value:String):T = {
-    typeOf[T] match {
-      case t if t =:= typeOf[String] => value.asInstanceOf[T]
-      case t if t =:= typeOf[Int] => value.toInt.asInstanceOf[T]
-      case t if t =:= typeOf[Long] => value.toLong.asInstanceOf[T]
-      case t if t =:= typeOf[Double] => value.toDouble.asInstanceOf[T]
-      case t if t =:= typeOf[Boolean] => value.toBoolean.asInstanceOf[T] //doesn't work with 0/1
-      case t if t =:= typeOf[Byte] => value.toByte.asInstanceOf[T]
-      case _ => throw new IllegalArgumentException("Cannot convert to type " + typeOf[T].toString)
-    }
   }
 
   override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair] = {
@@ -277,18 +247,38 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     })
     logger.info(s"Refreshed at index: ${consulApi.index}")
   }
-
-  private def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {
-    nameSpaces.map(_.trim).reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
-  }
 }
 
-object Dconfig {
-  private lazy val instance: ConfigSettings = stub.getOrElse(new Dconfig())
+object Dconfig extends StrictLogging {
+  // typesafe config to check for bootstrap settings.
+  private lazy val typesafeConfig = ConfigFactory.load()
+  // storage of a stub implementation for unit testing
   private var stub: Option[ConfigSettings] = None
 
-  // add check for instance already created
+  // the singleton instance of ConfigSettings
+  private lazy val instance: ConfigSettings = {
+    isInitialized = true
+    if (stub.isDefined)
+      stub.get
+    else if (typesafeConfig.hasPath("dconfig.consul.url") && typesafeConfig.getString("dconfig.consul.url") != "")
+      new Dconfig
+    else {
+      logger.error("Failed to find setting 'dconfig.consul.url'. Falling back to Typesafe based ConfigSettings.")
+      new TypesafeConfigSettings
+    }
+  }
+  // track if the singleton instance has been created yet.
+  private var isInitialized = false
+
+  /**
+    * For unit testing, pass an alternate implementation of ConfigSettings prior to first call to Dconfig()
+    * @param s alternate ConfigSettings implementation to use.
+    */
   def stub(s: ConfigSettings): Unit = {
+    // add check for instance already created
+    if (isInitialized)
+      throw new Exception("Dconfig ConfigSettings instance is already inititalized!")
+
     stub = Some(s)
   }
 
