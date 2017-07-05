@@ -79,4 +79,8 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     val defaultContainers = dconfig.getChildContainersAt("default.foo.bar")
     assert(defaultContainers.isEmpty)
   }
+
+  it should "not throw exception on liveUpdate calls" in {
+    noException should be thrownBy (new TypesafeConfigSettings)
+  }
 }

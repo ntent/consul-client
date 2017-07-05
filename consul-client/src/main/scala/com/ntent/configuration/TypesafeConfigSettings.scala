@@ -38,7 +38,6 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     }
   }
 
-
   override def getChildContainers: Set[String] = {
     getChildContainers("")
   }
@@ -64,9 +63,9 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
 
   // Live Update functions not implmemented. Config is static from Properties files.
   // TODO: Implement a fixed observable?
-  override def liveUpdateAll(): Observable[KeyValuePair] = ???
-  override def liveUpdateFolder(folder: String): Observable[KeyValuePair] = ???
-  override def liveUpdateEffectiveSettings(): Observable[KeyValuePair] = ???
-  override def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair] = ???
-  override def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[KeyValuePair] = ???
+  override def liveUpdateAll(): Observable[KeyValuePair] = { Observable.empty }
+  override def liveUpdateFolder(folder: String): Observable[KeyValuePair] = { Observable.empty }
+  override def liveUpdateEffectiveSettings(): Observable[KeyValuePair] = { Observable.empty }
+  override def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair] = { Observable.empty }
+  override def liveUpdate(key: String, useDefaultKeystores: Boolean, namespaces: String*): Observable[KeyValuePair] = { Observable.empty }
 }
