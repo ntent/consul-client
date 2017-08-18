@@ -49,6 +49,27 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     val res = dconfig.get("foo.bar.string",true,"dyn")
     assert(res.isDefined,"expected dyn to have a value!")
     assertResult("dyn_value","expected dyn value!")(dconfig.get("foo.bar.string",true,"dyn").get.value)
+//    val res2 = dconfig.get("bar.string",true,"foo dyn")
+//    assert(res2.isDefined,"expected dyn to have a value!")
+//    assertResult("dyn_value","expected dyn value!")(dconfig.get("bar.string",true,"foo dyn").get.value)
+    val res3 = dconfig.get("bar.string",true,"dyn.foo")
+    assert(res3.isDefined,"expected dyn to have a value!")
+    assertResult("dyn_value","expected dyn value!")(dconfig.get("bar.string",true,"dyn.foo").get.value)
+  }
+
+  it should "properly handle slash as separator" in {
+    System.setProperty("default.foo.bar.string","default_value")
+    System.setProperty("dev.foo.bar.string","dev_value")
+    System.setProperty("dyn.foo.bar.string","dyn_value")
+    System.setProperty("dconfig.consul.keyStores","default dev")
+    ConfigFactory.invalidateCaches()
+    val dconfig = new TypesafeConfigSettings
+    val res = dconfig.get("foo/bar/string",true,"dyn")
+    assert(res.isDefined,"expected dyn to have a value!")
+    assertResult("dyn_value","expected dyn value!")(dconfig.get("foo/bar/string",true,"dyn").get.value)
+    val res2 = dconfig.get("bar/string",true,"dyn/foo/")
+    assert(res2.isDefined,"expected dyn to have a value!")
+    assertResult("dyn_value","expected dyn value!")(dconfig.get("bar/string",true,"dyn/foo/").get.value)
   }
 
   it should "return containers from root" in {

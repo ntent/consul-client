@@ -24,7 +24,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     val allPaths = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     (for {
       ns <- allPaths
-      path = if (ns == null || ns.isEmpty) key else ConfigUtil.joinPath((Seq(ns) ++ ConfigUtil.splitPath(key).asScala).asJava)
+      path = if (ns == null || ns.isEmpty) key else ConfigUtil.joinPath((splitPath(ns) ++ splitPath(key)).asJava)
       if config.hasPath(path)
     } yield KeyValuePair(path, config.getString(path))).headOption
   }
@@ -58,6 +58,17 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
         filter(e=>e.getValue.valueType() == ConfigValueType.OBJECT).
         map(e=>e.getKey)
       containers.toSet
+    }
+  }
+
+  private def splitPath(path: String): List[String] = {
+    val forward = path.indexOf('/')
+    val backward = path.indexOf('\\')
+    if (forward == -1 && backward == -1)
+      ConfigUtil.splitPath(path).asScala.toList
+    else {
+      val sep = if (forward != -1) '/' else '\\'
+      path.split(sep).toList
     }
   }
 
