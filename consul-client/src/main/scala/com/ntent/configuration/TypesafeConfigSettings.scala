@@ -1,6 +1,6 @@
 package com.ntent.configuration
 
-import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigUtil, ConfigValueType}
+import com.typesafe.config._
 import com.typesafe.scalalogging.slf4j.StrictLogging
 import rx.lang.scala.Observable
 
@@ -34,7 +34,8 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
       Set[KeyValuePair]()
     else {
       val subConfig = config.getConfig(namespace)
-      subConfig.entrySet().asScala.map(e=>KeyValuePair(e.getKey,e.getValue.render())).toSet
+      val configRender = ConfigRenderOptions.concise().setFormatted(false).setJson(false).setComments(false)
+      subConfig.entrySet().asScala.map(e=>KeyValuePair(e.getKey,e.getValue.render(configRender))).toSet
     }
   }
 

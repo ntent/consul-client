@@ -104,4 +104,18 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
   it should "not throw exception on liveUpdate calls" in {
     noException should be thrownBy (new TypesafeConfigSettings)
   }
+
+  it should "return uwrapped (unquoted) values from getKeyValuePairsAt" in {
+    System.setProperty("default.foo.bat.first","first")
+    System.setProperty("default.foo.bat.second","second")
+    System.setProperty("default.foo.bat.third","third")
+    System.setProperty("default.foo.bat.fourth","fourth")
+    ConfigFactory.invalidateCaches()
+    val dconfig = new TypesafeConfigSettings
+    val keyValPairs = dconfig.getKeyValuePairsAt("default.foo.bat")
+    assert(keyValPairs.size  == 4)
+    for (pair <- keyValPairs.filter(p => p.key.endsWith("first"))) {
+      assert(pair.value.equals(pair.key))
+    }
+  }
 }
