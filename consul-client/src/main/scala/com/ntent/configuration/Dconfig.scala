@@ -58,7 +58,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     readingLoopTask.complete(Success(true))
   }
 
-  private def ensureOpen() = {
+  private def ensureOpen(): Unit = {
     if (readingLoopTask.isCompleted)
       throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
   }
@@ -70,7 +70,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       ns <- allNamespaces
       path = "/" + configRootPath + ns + "/" + key
       s = settings.get(path)
-      if(s.isDefined)
+      if s.isDefined
     } yield KeyValuePair(ns + "/" + key, s.get)).headOption
   }
 
@@ -79,7 +79,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     val path = "/" + configRootPath + namespace
     settings.filter(p => p._1.startsWith(path) && !p._1.endsWith("/")).map(f => {
       val key = f._1.substring(f._1.lastIndexOf("/") + 1)
-      new KeyValuePair(key, f._2)
+      KeyValuePair(key, f._2)
     }).toSet
   }
 
@@ -97,7 +97,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     ensureOpen()
     for {
       key <- settings.keySet
-      if (key.startsWith(path) && getContainerName(key, path).isDefined)
+      if key.startsWith(path) && getContainerName(key, path).isDefined
       container <- getContainerName(key, path)
     } yield container
   }
@@ -143,13 +143,12 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
   private def extractKeyFromPath(path:String, namespaces:List[String]):String = {
     namespaces match {
-      case s :: rest => {
+      case s :: rest =>
         val root = "/" + configRootPath + s + "/"
         if (path.startsWith(root))
           path.substring(root.length)
         else
           extractKeyFromPath(path,rest)
-      }
       case Nil => path
     }
   }
@@ -176,7 +175,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
         logger.debug(s"Tracking paths contains '${kv.key}' with value '${kv.value}'.")
       res
     }).
-      map(kv=> get(key,useDefaultKeystores,namespaces:_*)).
+      map(_=> get(key,useDefaultKeystores,namespaces:_*)).
       withFilter(_.isDefined).
       map(_.get).
       distinctUntilChanged.
@@ -185,7 +184,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
 
-  private def initialRead() = {
+  private def initialRead(): Unit = {
     val keys = consulApi.read(configRootPath)
     rebuild(keys)
     logger.info(s"Default Keystores are (${defaultKeyStores.mkString(",")})")
@@ -203,39 +202,34 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
             if(keys != null && !cancellation.isCompleted)
               rebuild(keys)
           } catch {
-            case e: java.util.concurrent.ExecutionException => {
-              val cause = e.getCause
-              if (cause.isInstanceOf[java.util.concurrent.TimeoutException]) {
-                /* long poll timeout, keep going */
+            case e: java.util.concurrent.ExecutionException =>
+              e.getCause match {
+                case _: java.util.concurrent.TimeoutException =>
+                  // long poll timeout, keep going
+                case _: java.net.ConnectException =>
+                  // Connection refused.  stop
+                  done = true
+                case _ =>
+                  logger.info("Error in property fetching loop", e)
+                  Thread.sleep(3000)
               }
-              else if(cause.isInstanceOf[java.net.ConnectException]) {
-                //Connection refused.  stop
-                done = true
-              }
-              else {
-                logger.info("Error in property fetching loop", e)
-                Thread.sleep(3000)
-              }
-            }
-            case e: Exception => {
+            case e: Exception =>
               logger.info("Error in property fetching loop", e)
               Thread.sleep(3000)
-            }
-            case e: Throwable => {
+            case e: Throwable =>
               logger.info("Exiting property reading loop", e)
               done = true
-            }
           }
         }
       }
     }
   }
 
-  private def rebuild(keys: Array[ConsulKey]) = {
+  private def rebuild(keys: Array[ConsulKey]): Unit = {
     val newSettings = (for {
     //ns <- defaultKeyStores;
       k <- keys
-      if(!k.Key.endsWith("/"))  // directory is listed as ending with "/", skip them
+      if !k.Key.endsWith("/")  // directory is listed as ending with "/", skip them
     } yield ("/"+k.Key, k.decodedValue)).
       toMap
 
@@ -282,7 +276,7 @@ object Dconfig extends StrictLogging {
     stub = Some(s)
   }
 
-  def apply() = instance
+  def apply(): ConfigSettings = instance
 }
 
 // Do NOT make it inner class, because serialization (at least jackson) will fail to create instance of object
@@ -297,5 +291,5 @@ case class ConsulKey(
 ) {
   def this(kv: (String,String)) = this(0L, 0L, 0L, kv._1, 0L,
     if(kv._2 == null) "" else Base64.encodeBase64String(StandardCharsets.UTF_8.encode(kv._2).array()))
-  val decodedValue = if(Value == null || Value == "") "" else new String(Base64.decodeBase64(Value))
+  val decodedValue: String = if(Value == null || Value == "") "" else new String(Base64.decodeBase64(Value))
 }
