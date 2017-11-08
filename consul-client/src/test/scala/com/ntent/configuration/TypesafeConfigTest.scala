@@ -29,6 +29,36 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     assertResult(true,"bool value")(dconfig.getAs[Boolean]("foo.bar.boolean"))
   }
 
+  it should "understand time values" in {
+    // Different time values to express "one day".
+    System.setProperty("foo.day.ms_no_units", "86400000")
+    System.setProperty("foo.day.sec_no_units", "86400")
+    System.setProperty("foo.day.ms", "86400000ms")
+    System.setProperty("foo.day.ms_plus_1", "86400001ms")
+    System.setProperty("foo.day.sec", "86400s")
+    System.setProperty("foo.day.min", "1440m")
+    System.setProperty("foo.day.hours", "24h")
+    System.setProperty("foo.day.days", "1d")
+    ConfigFactory.invalidateCaches()
+    val dconfig = new TypesafeConfigSettings
+
+    assert(dconfig.getMs("foo.day.ms_no_units") == 86400000)
+    assert(dconfig.getMs("foo.day.ms") == 86400000)
+    assert(dconfig.getMs("foo.day.ms_plus_1") == 86400001)
+    assert(dconfig.getMs("foo.day.sec") == 86400000)
+    assert(dconfig.getMs("foo.day.min") == 86400000)
+    assert(dconfig.getMs("foo.day.hours") == 86400000)
+    assert(dconfig.getMs("foo.day.days") == 86400000)
+
+    assert(dconfig.getMs("foo.day.sec_no_units") == 86400)
+    assert(dconfig.getSec("foo.day.ms") == 86400)
+    assert(dconfig.getSec("foo.day.ms_plus_1") == 86401)
+    assert(dconfig.getSec("foo.day.sec") == 86400)
+    assert(dconfig.getSec("foo.day.min") == 86400)
+    assert(dconfig.getSec("foo.day.hours") == 86400)
+    assert(dconfig.getSec("foo.day.days") == 86400)
+  }
+
   it should "use dotted paths to implement inheritance" in {
     System.setProperty("default.foo.bar.string","default_value")
     System.setProperty("dev.foo.bar.string","dev_value")

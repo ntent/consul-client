@@ -32,6 +32,62 @@ trait ConfigSettings {
     }
   }
 
+  /**
+    * Return milliseconds from a time value like: 250ms, 90s, 5m, or 1h.
+    */
+  def getMs(key: String): Int = {
+    getTime(key) match {
+      // Assume value was in milliseconds.
+      case Left(x) => x
+      // Return milliseconds.
+      case Right(x) => x
+    }
+  }
+
+  /**
+    * Return seconds from a time value like: 250ms, 90s, 5m, or 1h.
+    */
+  def getSec(key: String): Int = {
+    getTime(key) match {
+      // Assume value was in seconds.
+      case Left(x) => x
+      // Convert to seconds.  Round any fraction up to the next second.
+      case Right(x) => (x / 1000) + (if ((x % 1000) > 0) {1} else {0})
+    }
+  }
+
+  /**
+    * Left(number) if no units.  Right(milliseconds) for time values like: 250ms, 90s, 5m, or 1h.
+    */
+  private def getTime(key: String): Either[Int, Int] = {
+    // Get the value.
+    val value = get(key)
+    val len = value.length
+
+    var cause: Exception = null
+    try {
+      // Get the last two characters of the value.
+      val lastChar = value.charAt(len - 1)
+      val nextToLastChar = if (len > 1) { value.charAt(len - 2) } else { '0' }
+
+      // Parse and return, if we can identify the units.
+      (nextToLastChar, lastChar) match {
+        case (_, z) if z.isDigit => return Left(value.toInt)  // We can drop support for "no units", once all time values have units.
+        case ('m', 's') => return Right(value.substring(0, len - 2).toInt)
+        case (_, 's') => return Right(value.substring(0, len - 1).toInt * 1000)
+        case (_, 'm') => return Right(value.substring(0, len - 1).toInt * 60 * 1000)
+        case (_, 'h') => return Right(value.substring(0, len - 1).toInt * 60 * 60 * 1000)
+        case (_, 'd') => return Right(value.substring(0, len - 1).toInt * 24 * 60 * 60 * 1000)
+        case (_, _) =>
+      }
+    } catch {
+      case ex: Exception => cause = ex
+    }
+
+    // Throw failed value and cause (if any).
+    throw new IllegalStateException(s"Unable to parse time value($value) fetched from key($key)", cause)
+  }
+
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair]
 
   def getKeyValuePairsAt(namespace: String): Set[KeyValuePair]
