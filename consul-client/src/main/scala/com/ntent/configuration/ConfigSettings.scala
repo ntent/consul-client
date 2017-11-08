@@ -6,12 +6,29 @@ import scala.reflect.runtime.universe._
 trait ConfigSettings {
   private lazy val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
 
+  /** Get config value for this key.  Throw if not found. */
   def get(key: String): String = get(key, useDefaultKeystores = true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
 
-  def getAs[T : _root_.scala.reflect.runtime.universe.TypeTag](key:String): T = {
-    convert[T](get(key))
-  }
+  /** Get config value for this key, converted to specified type.  Throw if not found, wrong type, or unsupported type. */
+  def getAs[T : _root_.scala.reflect.runtime.universe.TypeTag](key:String): T = convert[T](get(key))
 
+  /** Return milliseconds for a time value like: 250ms, 90s, 5m, or 1h.  (Uppercase also fine.) */
+  def getMs(key: String): Int = getTime(key, 1)
+  /** Return seconds for a time value like: 250ms, 90s, 5m, or 1h.  Fractions like "10ms" round up to 1 second, not zero. */
+  def getSec(key: String): Int = getTime(key, 1000)
+  /** Return minutes for a time value like: 250ms, 90s, 5m, or 1h.  Fractions like "10ms" round up to 1 minute, not zero. */
+  def getMinutes(key: String): Int = getTime(key, 60 * 1000)
+
+  /** Returns bytes for a size value like: 500b, 100k, 100kb, 30m, 30mb, 2g, or 2gb.  (Uppercase also fine.) */
+  def getBytes(key: String): Long = getSize(key, 1)
+  /** Returns kilobytes from a size value like: 250b, 100k, 30m, or 2g.  Fractions like "100b" round up to 1 KB, not zero. */
+  def getKb(key: String): Long = getSize(key, 1024)
+  /** Returns megabytes from a size value like: 250b, 100k, 30m, or 2g.  Fractions like "100b" round up to 1 MB, not zero. */
+  def getMb(key: String): Long = getSize(key, 1024 * 1024)
+  /** Returns gigabytes from a size value like: 250b, 100k, 30m, or 2g.  Fractions like "10b" round up to 1 GB, not zero. */
+  def getGb(key: String): Long = getSize(key, 1024 * 1024 * 1024)
+
+  /** Split a value on specified delimiter, return that list of values. */
   def getList[T: _root_.scala.reflect.runtime.universe.TypeTag](key: String, delimiter: String = ","): List[T] = {
     val value = get(key)
     (for{
@@ -20,6 +37,7 @@ trait ConfigSettings {
     } yield cv).toList
   }
 
+  /** Convert value to specified type T.  Throw if value cannot be converted to this type, or unsupported type. */
   def convert[T : _root_.scala.reflect.runtime.universe.TypeTag](value:String):T = {
     typeOf[T] match {
       case t if t =:= typeOf[String] => value.asInstanceOf[T]
@@ -30,62 +48,6 @@ trait ConfigSettings {
       case t if t =:= typeOf[Byte] => value.toByte.asInstanceOf[T]
       case _ => throw new IllegalArgumentException("Cannot convert to type " + typeOf[T].toString)
     }
-  }
-
-  /**
-    * Return milliseconds from a time value like: 250ms, 90s, 5m, or 1h.
-    */
-  def getMs(key: String): Int = {
-    getTime(key) match {
-      // Assume value was in milliseconds.
-      case Left(x) => x
-      // Return milliseconds.
-      case Right(x) => x
-    }
-  }
-
-  /**
-    * Return seconds from a time value like: 250ms, 90s, 5m, or 1h.
-    */
-  def getSec(key: String): Int = {
-    getTime(key) match {
-      // Assume value was in seconds.
-      case Left(x) => x
-      // Convert to seconds.  Round any fraction up to the next second.
-      case Right(x) => (x / 1000) + (if ((x % 1000) > 0) {1} else {0})
-    }
-  }
-
-  /**
-    * Left(number) if no units.  Right(milliseconds) for time values like: 250ms, 90s, 5m, or 1h.
-    */
-  private def getTime(key: String): Either[Int, Int] = {
-    // Get the value.
-    val value = get(key)
-    val len = value.length
-
-    var cause: Exception = null
-    try {
-      // Get the last two characters of the value.
-      val lastChar = value.charAt(len - 1)
-      val nextToLastChar = if (len > 1) { value.charAt(len - 2) } else { '0' }
-
-      // Parse and return, if we can identify the units.
-      (nextToLastChar, lastChar) match {
-        case (_, z) if z.isDigit => return Left(value.toInt)  // We can drop support for "no units", once all time values have units.
-        case ('m', 's') => return Right(value.substring(0, len - 2).toInt)
-        case (_, 's') => return Right(value.substring(0, len - 1).toInt * 1000)
-        case (_, 'm') => return Right(value.substring(0, len - 1).toInt * 60 * 1000)
-        case (_, 'h') => return Right(value.substring(0, len - 1).toInt * 60 * 60 * 1000)
-        case (_, 'd') => return Right(value.substring(0, len - 1).toInt * 24 * 60 * 60 * 1000)
-        case (_, _) =>
-      }
-    } catch {
-      case ex: Exception => cause = ex
-    }
-
-    // Throw failed value and cause (if any).
-    throw new IllegalStateException(s"Unable to parse time value($value) fetched from key($key)", cause)
   }
 
   def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair]
@@ -109,4 +71,84 @@ trait ConfigSettings {
   protected def expandAndReverseNamespaces(nameSpaces: Array[String]): Array[String] = {
     nameSpaces.map(_.trim).reverse.map(_.replaceAllLiterally("{host}", _hostFQDN))
   }
+
+  /**
+    * Converts a time value like: 250ms, 90s, 5m, or 1h to bytes, then divides by specified divisor (rounding up all fractions).
+    * If no units, return value, ignoring divisor.  (Assume the value is already in that unit.)
+    */
+  private def getTime(key: String, divisor: Int): Int = {
+    // Get the value.
+    val value = get(key)
+    val len = value.length
+
+    try {
+      // Calculate desired units, from this value.
+      val (digits, suffix) = splitDigitsFromSuffix(value)
+      (suffix match {
+        case "ms" => divCeil(digits, divisor)
+        case "s"  => divCeil(digits * 1000, divisor)
+        case "m"  => divCeil(digits * 60 * 1000, divisor)
+        case "h"  => divCeil(digits * 60 * 60 * 1000, divisor)
+        case "d"  => divCeil(digits * 24 * 60 * 60 * 1000, divisor)
+        case "" =>
+          // Assume value is already in the "units" requested by caller.
+          // We can drop support for "no units", once all Consul time values have units.
+          digits
+        case _ =>
+          throw new IllegalStateException("Units unrecognized.")
+      }).toInt
+    } catch {
+      case ex: Exception => throw new IllegalStateException(s"Unable to parse time value($value) fetched from key($key)", ex)
+    }
+  }
+
+  /**
+    * Converts a size value like: 500b, 100k, 30m, or 2g to bytes, then divides by specified divisor (rounding up all fractions).
+    * If no units, return value, ignoring divisor.  (Assume the value is already in that unit.)
+    */
+  private def getSize(key: String, divisor: Long): Long = {
+    // Get the value.
+    val value = get(key)
+
+    try {
+      // Calculate desired units, from this value.
+      val (digits, suffix) = splitDigitsFromSuffix(value)
+      suffix match {
+        case "b"        => divCeil(digits, divisor)
+        case "k" | "kb" => divCeil(digits * 1024, divisor)
+        case "m" | "mb" => divCeil(digits * 1024 * 1024, divisor)
+        case "g" | "gb" => divCeil(digits * 1024 * 1024 * 1024, divisor)
+        case "" =>
+          // Assume value is already in the "units" requested by caller.
+          // We can drop support for "no units", once all Consul time values have units.
+          digits
+        case _ =>
+          throw new IllegalStateException("Units unrecognized.")
+      }
+    } catch {
+      case ex: Exception => throw new IllegalStateException(s"Unable to parse size value($value) fetched from key($key)", ex)
+    }
+  }
+
+  private def splitDigitsFromSuffix(value: String): (Long, String) = {
+    val suffixPos = value.indexWhere(c => !c.isDigit) match {
+      case -1 => value.length
+      case x => x
+    }
+    val digits = value.substring(0, suffixPos).toLong
+    val suffix = value.substring(suffixPos).toLowerCase
+    (digits, suffix)
+  }
+
+  /**
+    * Divide x by divisor.  Round all fractions up.
+    */
+  private def divCeil(x: Long, divisor: Long): Long = {
+    if (divisor <= 1) {
+      x
+    } else {
+      (x / divisor) + (if ((x % divisor) > 0) {1} else {0})
+    }
+  }
+
 }
