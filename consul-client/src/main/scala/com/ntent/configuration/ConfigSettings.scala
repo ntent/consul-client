@@ -13,11 +13,11 @@ trait ConfigSettings {
   def getAs[T : _root_.scala.reflect.runtime.universe.TypeTag](key:String): T = convert[T](get(key))
 
   /** Return milliseconds for a time value like: 250ms, 90s, 5m, or 1h.  (Uppercase also fine.) */
-  def getMs(key: String): Int = getTime(key, 1)
+  def getMs(key: String): Long = getTime(key, 1)
   /** Return seconds for a time value like: 250ms, 90s, 5m, or 1h.  Fractions like "10ms" round up to 1 second, not zero. */
-  def getSec(key: String): Int = getTime(key, 1000)
+  def getSec(key: String): Long = getTime(key, 1000)
   /** Return minutes for a time value like: 250ms, 90s, 5m, or 1h.  Fractions like "10ms" round up to 1 minute, not zero. */
-  def getMinutes(key: String): Int = getTime(key, 60 * 1000)
+  def getMinutes(key: String): Long = getTime(key, 60 * 1000)
 
   /** Returns bytes for a size value like: 500b, 100k, 100kb, 30m, 30mb, 2g, or 2gb.  (Uppercase also fine.) */
   def getBytes(key: String): Long = getSize(key, 1)
@@ -76,15 +76,14 @@ trait ConfigSettings {
     * Converts a time value like: 250ms, 90s, 5m, or 1h to bytes, then divides by specified divisor (rounding up all fractions).
     * If no units, return value, ignoring divisor.  (Assume the value is already in that unit.)
     */
-  private def getTime(key: String, divisor: Int): Int = {
+  private def getTime(key: String, divisor: Long): Long = {
     // Get the value.
     val value = get(key)
-    val len = value.length
 
     try {
       // Calculate desired units, from this value.
       val (digits, suffix) = splitDigitsFromSuffix(value)
-      (suffix match {
+      suffix match {
         case "ms" => divCeil(digits, divisor)
         case "s"  => divCeil(digits * 1000, divisor)
         case "m"  => divCeil(digits * 60 * 1000, divisor)
@@ -96,7 +95,7 @@ trait ConfigSettings {
           digits
         case _ =>
           throw new IllegalStateException("Units unrecognized.")
-      }).toInt
+      }
     } catch {
       case ex: Exception => throw new IllegalStateException(s"Unable to parse time value($value) fetched from key($key)", ex)
     }
