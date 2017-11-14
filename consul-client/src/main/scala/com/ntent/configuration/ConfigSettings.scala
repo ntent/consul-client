@@ -89,10 +89,6 @@ trait ConfigSettings {
         case "m"  => divCeil(digits * 60 * 1000, divisor)
         case "h"  => divCeil(digits * 60 * 60 * 1000, divisor)
         case "d"  => divCeil(digits * 24 * 60 * 60 * 1000, divisor)
-        case "" =>
-          // Assume value is already in the "units" requested by caller.
-          // We can drop support for "no units", once all Consul time values have units.
-          digits
         case _ =>
           throw new IllegalStateException("Units unrecognized.")
       }

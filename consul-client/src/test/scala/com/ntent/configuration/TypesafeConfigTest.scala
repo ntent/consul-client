@@ -35,9 +35,8 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     val secondsPerDay = minutesPerDay * 60
     val msPerDay = secondsPerDay * 1000
 
-    System.setProperty("foo.day.ms_no_units", s"$msPerDay")
-    System.setProperty("foo.day.sec_no_units", s"$secondsPerDay")
-    System.setProperty("foo.day.minutes_no_units", s"$minutesPerDay")
+    System.setProperty("foo.day.no_units", s"$msPerDay")
+
     System.setProperty("foo.day.ms", s"${msPerDay}ms")
     System.setProperty("foo.day.ms_plus_1", s"${msPerDay + 1}ms")
     System.setProperty("foo.day.sec", s"${secondsPerDay}s")
@@ -47,7 +46,9 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     ConfigFactory.invalidateCaches()
     val dconfig = new TypesafeConfigSettings
 
-    assert(dconfig.getMs("foo.day.ms_no_units") == msPerDay)
+    // Rolled out, "no units" no longer acceptable for time values.
+    assertThrows[Exception](dconfig.getMs("foo.day.no_units"))
+
     assert(dconfig.getMs("foo.day.ms")          == msPerDay)
     assert(dconfig.getMs("foo.day.ms_plus_1")   == msPerDay + 1)
     assert(dconfig.getMs("foo.day.sec")         == msPerDay)
@@ -55,7 +56,6 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     assert(dconfig.getMs("foo.day.hours")       == msPerDay)
     assert(dconfig.getMs("foo.day.days")        == msPerDay)
 
-    assert(dconfig.getSec("foo.day.sec_no_units") == secondsPerDay)
     assert(dconfig.getSec("foo.day.ms")           == secondsPerDay)
     assert(dconfig.getSec("foo.day.ms_plus_1")    == secondsPerDay + 1)
     assert(dconfig.getSec("foo.day.sec")          == secondsPerDay)
@@ -63,7 +63,6 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     assert(dconfig.getSec("foo.day.hours")        == secondsPerDay)
     assert(dconfig.getSec("foo.day.days")         == secondsPerDay)
 
-    assert(dconfig.getMinutes("foo.day.minutes_no_units") == minutesPerDay)
     assert(dconfig.getMinutes("foo.day.ms")               == minutesPerDay)
     assert(dconfig.getMinutes("foo.day.ms_plus_1")        == minutesPerDay + 1)
     assert(dconfig.getMinutes("foo.day.sec")              == minutesPerDay)
@@ -77,11 +76,13 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     val mb = 10L * 1024
     val kb = mb * 1024
     val bytes = kb * 1024
-    
+
+    // Until rollout, "no units" acceptable for size values.
     System.setProperty("foo.gig.b_no_units", s"$bytes")
     System.setProperty("foo.gig.kb_no_units", s"$kb")
     System.setProperty("foo.gig.mb_no_units", s"$mb")
     System.setProperty("foo.gig.gb_no_units", "10")
+
     System.setProperty("foo.gig.b", s"${bytes}b")
     System.setProperty("foo.gig.b_plus_1", s"${bytes + 1}B")
     System.setProperty("foo.gig.k", s"${kb}k")
