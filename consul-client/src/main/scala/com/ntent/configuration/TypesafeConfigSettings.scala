@@ -18,6 +18,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     else
       Array[String]()
 
+  override def keystores: Seq[String] = defaultKeyStores.reverse
 
   override def get(key: String, useDefaultKeystores: Boolean, namespaces: String*): Option[KeyValuePair] = {
     // look in each namespace in turn, then in the root.

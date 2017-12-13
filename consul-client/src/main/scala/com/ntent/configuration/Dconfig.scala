@@ -27,7 +27,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   } else {
     defaultKeyStores = expandAndReverseNamespaces(appSettings.getString("dconfig.consul.keyStores").split(" |,|\\|"))
   }
-  val keystores: Seq[String] = defaultKeyStores.reverse
+  override val keystores: Seq[String] = defaultKeyStores.reverse
 
   private val events = Subject[KeyValuePair]()
   private lazy val distictChanges = events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)

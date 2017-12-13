@@ -6,6 +6,8 @@ import scala.reflect.runtime.universe._
 trait ConfigSettings {
   private lazy val _hostFQDN = java.net.InetAddress.getLocalHost.getHostName
 
+  def keystores : Seq[String]
+
   /** Get config value for this key.  Throw if not found. */
   def get(key: String): String = get(key, useDefaultKeystores = true).getOrElse(throw new RuntimeException(s"Key not found '$key'")).value
 
