@@ -118,6 +118,14 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     res.toSeq.distinct
   }
 
+  override def getAllSettings: Seq[KeyValuePair] = {
+    val res = for {
+      t <- settings
+      settingName = extractKeyFromPath(t._1,defaultKeyStores.toList)
+    } yield KeyValuePair(t._1,t._2,settingName)
+    res.toSeq
+  }
+
   override def liveUpdateAll(): Observable[KeyValuePair] = {
     liveUpdateFolder("")
   }

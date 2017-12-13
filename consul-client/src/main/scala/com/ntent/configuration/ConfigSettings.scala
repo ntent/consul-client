@@ -66,6 +66,12 @@ trait ConfigSettings {
     */
   def getEffectiveSettings : Seq[KeyValuePair]
 
+  /**
+    * Get the current list of "effective settings" (just the settings actively in use based on list of configStores)
+    * @return sequence of effective setting KeyValuePair objects. The Key should be the full path for the setting, not just its name.
+    */
+  def getAllSettings : Seq[KeyValuePair]
+
   def liveUpdateAll(): Observable[KeyValuePair]
 
   def liveUpdateFolder(folder: String): Observable[KeyValuePair]

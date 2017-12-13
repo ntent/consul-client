@@ -85,6 +85,15 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     res.toSeq.distinct
   }
 
+  override def getAllSettings: Seq[KeyValuePair] = {
+    val allEntries = config.entrySet()
+    val res = for {
+      entry <- allEntries.asScala
+      kv = KeyValuePair(entry.getKey,entry.getValue.render(),entry.getKey)
+    } yield kv
+    res.toSeq
+  }
+
   // Live Update functions not implmemented. Config is static from Properties files.
   // TODO: Implement a fixed observable?
   override def liveUpdateAll(): Observable[KeyValuePair] = { Observable.empty }
