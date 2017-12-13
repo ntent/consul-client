@@ -26,7 +26,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
       ns <- allPaths
       path = if (ns == null || ns.isEmpty) key else ConfigUtil.joinPath((splitPath(ns) ++ splitPath(key)).asJava)
       if config.hasPath(path)
-    } yield KeyValuePair(path, config.getString(path))).headOption
+    } yield KeyValuePair(path, config.getString(path), key)).headOption
   }
 
   override def getKeyValuePairsAt(namespace: String): Set[KeyValuePair] = {
@@ -35,7 +35,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     else {
       val subConfig = config.getConfig(namespace)
       val configRender = ConfigRenderOptions.concise().setFormatted(false).setJson(false).setComments(false)
-      subConfig.entrySet().asScala.map(e=>KeyValuePair(e.getKey,e.getValue.render(configRender))).toSet
+      subConfig.entrySet().asScala.map(e=>KeyValuePair((if (namespace != null && namespace.length > 0) namespace + "." else "") + e.getKey,e.getValue.render(configRender),e.getKey)).toSet
     }
   }
 
@@ -71,6 +71,17 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
       val sep = if (forward != -1) '/' else '\\'
       path.split(sep).toList
     }
+  }
+
+  override def getEffectiveSettings: Seq[KeyValuePair] = {
+    val allEntries = config.entrySet()
+    val res = for {
+      entry <- allEntries.asScala
+      kv = KeyValuePair(entry.getKey,entry.getValue.render(),entry.getKey)
+      value = get(kv.fullPath,useDefaultKeystores = true)
+      if value.isDefined
+    } yield value.get
+    res.toSeq.distinct
   }
 
   // Live Update functions not implmemented. Config is static from Properties files.

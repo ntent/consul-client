@@ -65,7 +65,8 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   val globalSettings = Seq(
     "liveKey" -> "global-value",
     "key2" -> "global-value",
-    "localKey" -> "global-value"
+    "localKey" -> "global-value",
+    "globalKey" -> "global-value"
   )
 
   val devSettings = Seq(
@@ -94,6 +95,19 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val res = dc.get("key1")
     assert(res == "value1")
     dc.close()
+  }
+
+  it should "get correct effective settings" in {
+    System.setProperty("dconfig.consul.keyStores", "global dev stg {host}")
+    ConfigFactory.invalidateCaches()
+
+    val dc = new Dconfig()
+    val effective = dc.getEffectiveSettings
+    assert(effective.length == 12)
+    assert(effective.filter(kv => kv.key == "globalKey").head.value == "global-value")
+    assert(effective.filter(kv => kv.key == "liveKey").head.value == "stg-value")
+    assert(effective.filter(kv => kv.key == "localKey").head.value == "stg-value")
+    assert(effective.filter(kv => kv.key == "intKey").head.value == "1")
   }
 
   it should "list all keys under stg container" in {
@@ -136,8 +150,8 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val dc = new Dconfig()
     val p = Promise[KeyValuePair]()
 
-    val val1 = KeyValuePair("foo","bar")
-    val val2 = KeyValuePair("foo","bar")
+    val val1 = KeyValuePair("sub/foo","bar","foo")
+    val val2 = KeyValuePair("sub/foo","bar","foo")
     assert(val1 == val2)
     assert(val1.hashCode() == val2.hashCode())
 
@@ -154,7 +168,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "dev/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res.key == "dev/liveKey")
+    assert(res.fullPath == "dev/liveKey")
     assert(res.value == value)
     dc.close()
   }
@@ -176,7 +190,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "custom2/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
-    assert(res.key == "custom2/liveKey")
+    assert(res.fullPath == "custom2/liveKey")
     assert(res.value == value)
     dc.close()
   }
@@ -232,7 +246,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val dc = new Dconfig()
     var count = 0
     dc.liveUpdateEffectiveSettings().
-      doOnEach(kv=>Console.println(s"${kv.key} = ${kv.value}")).
+      doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
       subscribe(_ => count = count+1)
     assert(count > 1,"Did not receive more than one updated key!")
 
@@ -245,7 +259,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     var count = 0
     dc.liveUpdateEffectiveSettings().
       filter(kv=>kv.key=="liveKey").
-      doOnEach(kv=>Console.println(s"${kv.key} = ${kv.value}")).
+      doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
       subscribe(kv => { count = count+1; liveValue = kv.value })
 
     assert(liveValue != "","Did not receive initial value for liveKey!")

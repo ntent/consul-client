@@ -30,7 +30,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   val keystores: Seq[String] = defaultKeyStores.reverse
 
   private val events = Subject[KeyValuePair]()
-  private lazy val distictChanges = events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
+  private lazy val distictChanges = events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
   private var settings:Map[String,String] = _
   private val readingLoopTask = Promise[Boolean]
 
@@ -38,9 +38,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     // initialize a print-out of changes. this subscription doesn't print until there are two entries (a new value changed)
     // except it does flush when the subscription ends (even if the value never changed)
-    events.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,1)).subscribe(kvs => {
+    events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,1)).subscribe(kvs => {
       if (kvs.length == 2)
-        logger.info(s"Changed config: ${kvs.head.key} : ${kvs.head.value} => ${kvs(1).value}")
+        logger.info(s"Changed config: ${kvs.head.fullPath} : ${kvs.head.value} => ${kvs(1).value}")
     }, e=> logger.error("Error in config change subscription. No longer printing configuration updates.",e))
 
     initialRead()
@@ -71,7 +71,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       path = "/" + configRootPath + ns + "/" + key
       s = settings.get(path)
       if s.isDefined
-    } yield KeyValuePair(ns + "/" + key, s.get)).headOption
+    } yield KeyValuePair(ns + "/" + key, s.get, key)).headOption
   }
 
   override def getKeyValuePairsAt(namespace: String): Set[KeyValuePair] = {
@@ -79,7 +79,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     val path = "/" + configRootPath + namespace
     settings.filter(p => p._1.startsWith(path) && !p._1.endsWith("/")).map(f => {
       val key = f._1.substring(f._1.lastIndexOf("/") + 1)
-      KeyValuePair(key, f._2)
+      KeyValuePair(f._1, f._2, key)
     }).toSet
   }
 
@@ -108,6 +108,16 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     else None
   }
 
+  override def getEffectiveSettings : Seq[KeyValuePair] = {
+    val res = for {
+      t <- settings
+      settingName = extractKeyFromPath(t._1, defaultKeyStores.toList)
+      value = get(settingName, useDefaultKeystores = true)
+      if value.isDefined
+    } yield value.get
+    res.toSeq.distinct
+  }
+
   override def liveUpdateAll(): Observable[KeyValuePair] = {
     liveUpdateFolder("")
   }
@@ -119,7 +129,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     ensureOpen()
     val uniqueChanges = distictChanges
     // only changes that are a sub-path of the given folder.
-    uniqueChanges.withFilter(kv => kv.key.startsWith(folderWithRoot))
+    uniqueChanges.withFilter(kv => kv.fullPath.startsWith(folderWithRoot))
       .map(kv=>kv)
   }
 
@@ -128,17 +138,16 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     // distinct will only alert us of changes, but we want to emit all values when first subscribed to.
     // concatenate the existing keys/values with the upcoming changes.
-    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2)) ++ distictChanges
+    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2, extractKeyFromPath(t._1, defaultKeyStores.toList))) ++ distictChanges
 
     // get just the key of the setting names (removing the path data)
     val res:Observable[KeyValuePair] = for {
       kv <- ob
-      settingName = extractKeyFromPath(kv.key, defaultKeyStores.toList)
-      value = get(settingName, useDefaultKeystores = true)
+      value = get(kv.key, useDefaultKeystores = true)
       if value.isDefined
-    } yield KeyValuePair(settingName, value.get.value)
+    } yield value.get
 
-    res.groupBy(kv=>kv.key).flatMap(kv=>kv._2.distinctUntilChanged)
+    res.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
   }
 
   private def extractKeyFromPath(path:String, namespaces:List[String]):String = {
@@ -170,16 +179,16 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     val uniqueChanges = distictChanges
 
     uniqueChanges.withFilter(kv => {
-      val res = trackingPaths.contains(kv.key)
+      val res = trackingPaths.contains(kv.fullPath)
       if(res)
-        logger.debug(s"Tracking paths contains '${kv.key}' with value '${kv.value}'.")
+        logger.debug(s"Tracking paths contains '${kv.fullPath}' with value '${kv.value}'.")
       res
     }).
       map(_=> get(key,useDefaultKeystores,namespaces:_*)).
       withFilter(_.isDefined).
       map(_.get).
       distinctUntilChanged.
-      doOnNext(v => logger.info(s"Watched config updated: ${v.key} : ${v.value}")).
+      doOnNext(v => logger.info(s"Watched config updated: ${v.fullPath} : ${v.value}")).
       //observeOn(TrampolineScheduler())
       observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
@@ -237,7 +246,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     settings = newSettings
 
     newSettings.foreach(kv => {
-      events.onNext(KeyValuePair(kv._1,kv._2))
+      events.onNext(KeyValuePair(kv._1,kv._2,extractKeyFromPath(kv._1,defaultKeyStores.toList)))
     })
     logger.info(s"Refreshed at index: ${consulApi.index}")
   }

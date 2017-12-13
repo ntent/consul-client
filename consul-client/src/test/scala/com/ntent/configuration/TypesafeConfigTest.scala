@@ -144,6 +144,19 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     assertResult("dev_value","expected dev value!")(dconfig.get("foo.bar.string"))
   }
 
+  it should "get correct effective settings" in {
+    System.setProperty("default.foo.bar.string","default_value")
+    System.setProperty("dev.foo.bar.string","dev_value")
+    System.setProperty("prd.foo.bar.string","prd_value")
+    System.setProperty("dconfig.consul.keyStores","default prd stg dev")
+    ConfigFactory.invalidateCaches()
+    val dc = new TypesafeConfigSettings
+
+    val effective = dc.getEffectiveSettings
+    assert(effective.length == 1)
+    assert(effective.filter(kv => kv.key == "foo.bar.string").head.value == "dev_value")
+  }
+
   it should "allow sending a dynamic namespace for inheritance" in {
     System.setProperty("default.foo.bar.string","default_value")
     System.setProperty("dev.foo.bar.string","dev_value")
@@ -219,8 +232,8 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     val dconfig = new TypesafeConfigSettings
     val keyValPairs = dconfig.getKeyValuePairsAt("default.foo.bat")
     assert(keyValPairs.size  == 4)
-    for (pair <- keyValPairs.filter(p => p.key.endsWith("first"))) {
-      assert(pair.value.equals(pair.key))
+    for (pair <- keyValPairs.filter(p => p.fullPath.endsWith("first"))) {
+      assert(pair.value == pair.key)
     }
   }
 }
