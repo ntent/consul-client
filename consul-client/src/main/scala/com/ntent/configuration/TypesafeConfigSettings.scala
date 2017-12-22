@@ -11,12 +11,16 @@ import scala.collection.JavaConverters._
   */
 class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
   private val config = ConfigFactory.load()
-  // look for and set the "default keystores
+  // look for and set the "default keystores"
   private val defaultKeyStores: Array[String] =
     if (config.hasPath("dconfig.consul.keyStores"))
       expandAndReverseNamespaces(config.getString("dconfig.consul.keyStores").split(" |,|\\|"))
     else
       Array[String]()
+
+  // look for and set the "configRootPath"
+  private val configRootPath: String =
+    if (config.hasPath("config.rootpath")) { config.getString("config.rootpath").stripSuffix(".") + "." } else ""
 
   override def keystores: Seq[String] = defaultKeyStores.reverse
 
@@ -25,27 +29,29 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     val allPaths = if(useDefaultKeystores) namespaces.reverse ++ defaultKeyStores else namespaces.reverse
     (for {
       ns <- allPaths
-      path = if (ns == null || ns.isEmpty) key else ConfigUtil.joinPath((splitPath(ns) ++ splitPath(key)).asJava)
-      if config.hasPath(path)
-    } yield KeyValuePair(path, config.getString(path), key)).headOption
+      path = if (ns == null || ns.isEmpty) key
+        else ConfigUtil.joinPath((splitPath(ns) ++ splitPath(key)).asJava)
+      fullPath = configRootPath + path
+      if config.hasPath(fullPath)
+    } yield KeyValuePair(fullPath, config.getString(fullPath), key)).headOption
   }
 
   override def getKeyValuePairsAt(namespace: String): Set[KeyValuePair] = {
     if (!config.hasPath(namespace))
       Set[KeyValuePair]()
     else {
-      val subConfig = config.getConfig(namespace)
+      val subConfig = config.getConfig(configRootPath + namespace)
       val configRender = ConfigRenderOptions.concise().setFormatted(false).setJson(false).setComments(false)
-      subConfig.entrySet().asScala.map(e=>KeyValuePair((if (namespace != null && namespace.length > 0) namespace + "." else "") + e.getKey,e.getValue.render(configRender),e.getKey)).toSet
+      subConfig.entrySet().asScala.map(e=>KeyValuePair(configRootPath + (if (namespace != null && namespace.length > 0) namespace + "." else "") + e.getKey,e.getValue.render(configRender),e.getKey)).toSet
     }
   }
 
   override def getChildContainers: Set[String] = {
-    getChildContainers("")
+    getChildContainers(configRootPath)
   }
 
   override def getChildContainersAt(namespace: String): Set[String] = {
-    getChildContainers(namespace)
+    getChildContainers(configRootPath + namespace)
   }
 
   private def getChildContainers(path: String): Set[String] = {
@@ -66,7 +72,9 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
   private def splitPath(path: String): List[String] = {
     val forward = path.indexOf('/')
     val backward = path.indexOf('\\')
-    if (forward == -1 && backward == -1)
+    if (path.isEmpty)
+      List("")
+    else if (forward == -1 && backward == -1)
       ConfigUtil.splitPath(path).asScala.toList
     else {
       val sep = if (forward != -1) '/' else '\\'
@@ -78,7 +86,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     val allEntries = config.entrySet()
     val res = for {
       entry <- allEntries.asScala
-      kv = KeyValuePair(entry.getKey,entry.getValue.render(),entry.getKey)
+      kv = KeyValuePair(configRootPath + entry.getKey,entry.getValue.render(),entry.getKey)
       value = get(kv.fullPath,useDefaultKeystores = true)
       if value.isDefined
     } yield value.get
@@ -89,7 +97,7 @@ class TypesafeConfigSettings extends ConfigSettings with StrictLogging {
     val allEntries = config.entrySet()
     val res = for {
       entry <- allEntries.asScala
-      kv = KeyValuePair(entry.getKey,entry.getValue.render(),entry.getKey)
+      kv = KeyValuePair(configRootPath + entry.getKey,entry.getValue.render(),entry.getKey)
     } yield kv
     res.toSeq
   }

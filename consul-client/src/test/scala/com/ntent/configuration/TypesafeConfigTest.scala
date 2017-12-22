@@ -29,6 +29,24 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
     assertResult(true,"bool value")(dconfig.getAs[Boolean]("foo.bar.boolean"))
   }
 
+  it should "use config.rootpath to locate settings" in {
+    val rootPath = "some.root.path"
+    System.setProperty("config.rootpath", rootPath)
+    System.setProperty(s"$rootPath.foo.baz.string", "baz")
+    System.setProperty(s"$rootPath.foo.baz.int", "51")
+    //"Unreachable" value since it does not have the root path
+    System.setProperty("foo.baz.int", "33")
+    System.setProperty(s"$rootPath.foo.bar.double","1.234")
+    System.setProperty(s"$rootPath.foo.bar.boolean","true")
+    ConfigFactory.invalidateCaches()
+    val dconfig = new TypesafeConfigSettings
+    assertResult("baz","string value")(dconfig.get("foo.baz.string"))
+    assertResult(51,"int value")(dconfig.getAs[Int]("foo.baz.int"))
+    assertResult(1.234,"double value")(dconfig.getAs[Double]("foo.bar.double"))
+    assertResult(true,"bool value")(dconfig.getAs[Boolean]("foo.bar.boolean"))
+    System.clearProperty("config.rootpath")
+  }
+
   it should "understand time values" in {
     // Different time values to express "one day".
     val minutesPerDay = 24L * 60
