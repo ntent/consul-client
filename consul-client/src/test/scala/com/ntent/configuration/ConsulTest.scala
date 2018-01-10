@@ -3,13 +3,16 @@ package com.ntent.configuration
 import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.TimeoutException
+
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.io.FileUtils
 import org.scalatest._
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
 import scala.sys.process._
+import scala.util.Random
 
 
 /**
@@ -379,6 +382,26 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val marketSet = dc.getChildContainersAt(customRoot)
     assert (marketSet.contains("Fake") && !marketSet.contains("tooFar"))
     dc.close()
+  }
+
+  ignore should "use acl token if specified in settings" in {
+    System.setProperty("dconfig.consul.url", "http://dev-consul-01.cb.ntent.com:8500/")
+    System.setProperty("dconfig.consul.access.token", "user-e2bbfe84-7dd0-47e7-ac34-849e96272b64")
+    ConfigFactory.invalidateCaches()
+
+    val api = new com.ntent.configuration.ConsulApiImplDefault()
+
+    val ttt = api.read("test/java-dconfig-acl-test/read-value")
+    assert(ttt.size == 1)
+    assert(ttt.head.decodedValue == "foo")
+
+    val rnd = Random.nextInt()
+    api.put("test/java-dconfig-acl-test","write-value",rnd.toString)
+
+    val readWritten = api.read("test/java-dconfig-acl-test/write-value")
+    assert(readWritten.size == 1)
+    assert(readWritten.head.decodedValue == rnd.toString)
+
   }
 
   /*it should "not leak threads" in {

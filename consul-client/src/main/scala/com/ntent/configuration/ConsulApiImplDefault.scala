@@ -25,6 +25,8 @@ class ConsulApiImplDefault() {
 
   private val appSettings = ConfigFactory.load()
   private val kvUrl = new URL(new URL(appSettings.getString("dconfig.consul.url")), "v1/kv/")
+  private val accessToken = if (appSettings.hasPath("dconfig.consul.access.token")) Some(appSettings.getString("dconfig.consul.access.token")) else None
+  import ConsulApiImplDefault._
 
   private lazy val consulQueryParams = Map(
     "separator" -> "/",
@@ -36,6 +38,7 @@ class ConsulApiImplDefault() {
 
     Request.
       Put(url.toString).
+      aclToken(accessToken).
       bodyString(if(value == null) "" else value, ContentType.APPLICATION_JSON).
       execute().returnContent()
   }
@@ -48,6 +51,7 @@ class ConsulApiImplDefault() {
     val url = new URL(kvUrl, dir.stripMargin('/')+ "/?recurse")
     Request.
       Delete(url.toString).
+      aclToken(accessToken).
       execute()
   }
 
@@ -61,7 +65,7 @@ class ConsulApiImplDefault() {
     consulQueryParams.foreach(nvp => builder.addParameter(nvp.getName,nvp.getValue))
     val url = builder.build()
 
-    val response = Request.Get(url).execute().returnResponse()
+    val response = Request.Get(url).aclToken(accessToken).execute().returnResponse()
     if(response.getStatusLine.getStatusCode == 404) {
       Array[ConsulKey]()
     } else {
@@ -80,7 +84,7 @@ class ConsulApiImplDefault() {
 
     val url = builder.build()
 
-    val response = Request.Get(url).execute().returnResponse()
+    val response = Request.Get(url).aclToken(accessToken).execute().returnResponse()
     val content = EntityUtils.toString(response.getEntity)
     if(content == null || content == "") {
       null
@@ -89,5 +93,11 @@ class ConsulApiImplDefault() {
       index = response.getLastHeader("X-Consul-Index").getValue.toLong
       keys
     }
+  }
+}
+
+object ConsulApiImplDefault {
+  implicit class ConsulRequestAcl(val req: Request) {
+    def aclToken(token : Option[String]) : Request = if (token.isEmpty) req else req.addHeader("X-Consul-Token",token.get)
   }
 }
