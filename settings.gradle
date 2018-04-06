@@ -1,3 +1,9 @@
+pluginManagement {
+  repositories {
+    maven { url "http://nexus.cb.ntent.com/nexus/content/groups/public/" }
+    gradlePluginPortal() // Include public Gradle plugin portal
+  }
+}
 
 def scalaModules = [
     'consul-client'
