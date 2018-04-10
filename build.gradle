@@ -6,7 +6,7 @@ buildscript {
     maven {url "http://nexus.cb.ntent.com/nexus/content/groups/public/"}
   }
     dependencies {
-        classpath group: "com.ntent.gradle", name: "gradle-build-utils", version: "0.1.11"
+        classpath group: "com.ntent.gradle", name: "gradle-build-utils", version: "0.1.20"
     }
 }
 
