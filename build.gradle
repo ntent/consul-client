@@ -58,7 +58,7 @@ project(":consul-client_$scalaVersion") {
         compile "org.scala-lang:scala-library:$scala_version"
 
         compile 'org.apache.httpcomponents:fluent-hc:4.2.6'
-        compile group: 'com.fasterxml.jackson.module', name: "jackson-module-scala_$scalaVersion", version: '2.8.3'
+        compile group: 'com.fasterxml.jackson.module', name: "jackson-module-scala_$scalaVersion", version: '2.9.5'
         compile group: 'io.reactivex', name: "rxscala_$scalaVersion", version: '0.26.3'
 
         compile group: 'com.typesafe.scala-logging', name: "scala-logging-slf4j_$scalaVersion", version: '2.1.2'
