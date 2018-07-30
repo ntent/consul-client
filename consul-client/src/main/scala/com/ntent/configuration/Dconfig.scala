@@ -32,6 +32,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   private val events = Subject[KeyValuePair]()
   private lazy val distictChanges = events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
   private var settings:Map[String,String] = _
+  @volatile private var readLoopFatal:Throwable = _
   private val readingLoopTask = Promise[Boolean]
 
   {
@@ -59,6 +60,8 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
 
   private def ensureOpen(): Unit = {
+    if (readLoopFatal != null)
+      throw readLoopFatal
     if (readingLoopTask.isCompleted)
       throw new Exception("This Dconfig instance is closed. It cannot be used anymore.")
   }
@@ -139,6 +142,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     // only changes that are a sub-path of the given folder.
     uniqueChanges.withFilter(kv => kv.fullPath.startsWith(folderWithRoot))
       .map(kv=>kv)
+      .observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
 
   override def liveUpdateEffectiveSettings() : Observable[KeyValuePair] = {
@@ -156,6 +160,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     } yield value.get
 
     res.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
+      .observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
 
   private def extractKeyFromPath(path:String, namespaces:List[String]):String = {
@@ -213,11 +218,19 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     scala.concurrent.Future {
       blocking {
         var done = false
+        var sleep = false
         while(!done && !cancellation.isCompleted) {
+
           try {
+            if (sleep) {
+              sleep = false
+              Thread.sleep(3000)
+            }
+
             val keys = consulApi.pollingRead(configRootPath)
             if(keys != null && !cancellation.isCompleted)
               rebuild(keys)
+
           } catch {
             case e: java.util.concurrent.ExecutionException =>
               e.getCause match {
@@ -225,17 +238,19 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
                   // long poll timeout, keep going
                 case _: java.net.ConnectException =>
                   // Connection refused.  stop
-                  done = true
+                  logger.error("ConnectException in property fetching loop. Retrying", e)
+                  sleep = true
                 case _ =>
-                  logger.info("Error in property fetching loop", e)
-                  Thread.sleep(3000)
+                  logger.info("Other Exception in property fetching loop. Retrying", e)
+                  sleep = true
               }
             case e: Exception =>
-              logger.info("Error in property fetching loop", e)
-              Thread.sleep(3000)
-            case e: Throwable =>
-              logger.info("Exiting property reading loop", e)
+              logger.warn("Exception in property fetching loop. Retrying", e)
+              sleep = true
+            case t: Throwable =>
+              readLoopFatal = t
               done = true
+              logger.error("Caught throwable in Property ReadingLoop Exiting.", t)
           }
         }
       }
