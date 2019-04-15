@@ -3,8 +3,11 @@ package com.ntent.configuration
 import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicLong
 
 import com.typesafe.config.ConfigFactory
+import com.ntent.configuration.ConsulTest._
+
 import org.apache.commons.io.FileUtils
 import org.scalatest._
 
@@ -12,8 +15,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, Promise}
 import scala.sys.process._
-import scala.util.Random
-
 
 /**
   * Created by vchekan on 2/3/2016.
@@ -169,7 +170,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       })
 
     val api = new ConsulApiImplDefault()
-    val value = "live value-" + new java.util.Random().nextLong().toString
+    val value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
@@ -191,7 +192,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       })
 
     val api = new ConsulApiImplDefault()
-    val value = "live value-" + new java.util.Random().nextLong().toString
+    val value = "live value-" + nextLongId()
     api.put(rootFolder, "custom2/liveKey", value)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
@@ -199,6 +200,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     assert(res.value == value)
     dc.close()
   }
+
+  it should "live update when key deleted in child namespace" in {
+
+  }
+
+
 
   //TODO: Test key delete.
   it should "not live update when key change in parent namespace" in {
@@ -215,8 +222,8 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       })
 
     val api = new ConsulApiImplDefault()
-    val devValue = "live value-" + new java.util.Random().nextLong().toString
-    val globalValue = "live value-" + new java.util.Random().nextLong().toString
+    val devValue = "live value-" + nextLongId()
+    val globalValue = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", devValue)
 
     val res = Await.result(p.future, Duration(30, "seconds"))
@@ -241,7 +248,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       subscribe(v => p.trySuccess(v.value))
 
     val api = new ConsulApiImplDefault()
-    val value = "live value-" + new java.util.Random().nextLong().toString
+    val value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
     //noinspection ScalaUnusedSymbol
@@ -276,14 +283,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     assert(count == 1,s"Did not receive single update for liveKey! (saw $count updates)")
 
     val api = new ConsulApiImplDefault()
-    var value = "live value-" + new java.util.Random().nextLong().toString
+    var value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
     Thread.sleep(2000)
     assert(liveValue == value, s"Expected live update to $value but got $liveValue")
     assert(count == 2,s"Did not receive second update for liveKey! (saw $count updates)")
 
-    value = "live value-" + new java.util.Random().nextLong().toString
+    value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
     Thread.sleep(2000)
@@ -301,7 +308,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       subscribe(v => p.trySuccess(v.value))
 
     val api = new ConsulApiImplDefault()
-    val value = "live value-" + new java.util.Random().nextLong().toString
+    val value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
     intercept[TimeoutException] {
@@ -321,7 +328,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       subscribe(v => p.trySuccess(v.value))
 
     // perform update in 2 seconds in "dead" namespace
-    val value = "dead update-" + new java.util.Random().nextLong().toString
+    val value = "dead update-" + nextLongId()
     Future({ Thread.sleep(2000); api.put(rootFolder, "dead/deadKey", value)})
 
     intercept[TimeoutException] {
@@ -355,7 +362,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val dc = new Dconfig()
     val api = new ConsulApiImplDefault
     val host = InetAddress.getLocalHost.getHostName
-    val value = "local value-" + new java.util.Random().nextLong().toString
+    val value = "local value-" + nextLongId()
     val key = "localKey"
     api.put(rootFolder, s"$host/$key", value)
 
@@ -404,12 +411,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     assert(ttt.length == 1)
     assert(ttt.head.decodedValue == "foo")
 
-    val rnd = Random.nextInt()
-    api.put("test/java-dconfig-acl-test","write-value",rnd.toString)
+    val rnd = nextLongId()
+    api.put("test/java-dconfig-acl-test","write-value",rnd)
 
     val readWritten = api.read("test/java-dconfig-acl-test/write-value")
     assert(readWritten.length == 1)
-    assert(readWritten.head.decodedValue == rnd.toString)
+    assert(readWritten.head.decodedValue == rnd)
 
   }
 
@@ -417,4 +424,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val dc = Dconfig()
     Thread.sleep(5000000)
   }*/
+}
+
+object ConsulTest {
+  val lastLongRef: AtomicLong = new AtomicLong(0)
+  /** Unique during this test run. */
+  def nextLongId(): String = {
+    lastLongRef.incrementAndGet().toString
+  }
 }
