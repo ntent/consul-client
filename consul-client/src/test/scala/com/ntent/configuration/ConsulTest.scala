@@ -25,7 +25,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
   System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
 
-  var consulProcess: Process = null
+  var consulProcess: Process = _
 
   override def beforeAll(conf: ConfigMap): Unit = {
 
@@ -35,6 +35,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
     val api = new com.ntent.configuration.ConsulApiImplDefault()
     api.deleteTree(rootFolder)
+    //noinspection ScalaUnusedSymbol
     val ttt = api.read(rootFolder)
     devSettings.foreach(kv => api.put(rootFolder + "/dev", kv._1, kv._2))
     stgSettings.foreach(kv => api.put(rootFolder + "/stg", kv._1, kv._2))
@@ -45,7 +46,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     cleanup()
   }
 
-  override def beforeEach() = {
+  override def beforeEach(): Unit = {
     System.setProperty("dconfig.consul.keyStores","global dev {host}")
     System.setProperty("dconfig.consul.configRoot", rootFolder)
     ConfigFactory.invalidateCaches()
@@ -55,7 +56,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     System.clearProperty("dconfig.consul.keyStores")
   }
 
-  def cleanup() = {
+  def cleanup(): Unit = {
     if(consulProcess != null) {
       consulProcess.destroy()
       Thread.sleep(500)
@@ -65,14 +66,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
       FileUtils.deleteDirectory(new File("bin/consul-data"))
   }
 
-  val globalSettings = Seq(
+  private val globalSettings = Seq(
     "liveKey" -> "global-value",
     "key2" -> "global-value",
     "localKey" -> "global-value",
     "globalKey" -> "global-value"
   )
 
-  val devSettings = Seq(
+  private val devSettings = Seq(
     "key1" -> "value1",
     "key2" -> "value2",
     "intKey" -> "1",
@@ -86,7 +87,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     "localKey" -> "dev-value"
   )
 
-  val stgSettings = Seq(
+  private val stgSettings = Seq(
     "key_new" -> "new value",
     "key2" -> "value2 override",
     "liveKey" -> "stg-value",
@@ -149,6 +150,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
+  //TODO: Test key delete.
   it should "live update only changed value when changed" in {
     val dc = new Dconfig()
     val p = Promise[KeyValuePair]()
@@ -161,7 +163,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.liveUpdate("liveKey").
       subscribe(v => {
         if (p.isCompleted)
-          assert(false,"liveUpdate called more than once for a single key update")
+          fail("liveUpdate called more than once for a single key update")
         else
           p.trySuccess(v)
       })
@@ -183,7 +185,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.liveUpdate("liveKey","custom1","custom2").
       subscribe(v => {
         if (p.isCompleted)
-          assert(false,"liveUpdate called more than once for a single key update")
+          fail("liveUpdate called more than once for a single key update")
         else
           p.trySuccess(v)
       })
@@ -198,6 +200,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
+  //TODO: Test key delete.
   it should "not live update when key change in parent namespace" in {
     val dc = new Dconfig()
     val p = Promise[KeyValuePair]
@@ -223,6 +226,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "global/liveKey", globalValue)
 
     intercept[TimeoutException] {
+      //noinspection ScalaUnusedSymbol
       val res = Await.result(pSecond.future, Duration(3, "seconds"))
     }
 
@@ -240,6 +244,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val value = "live value-" + new java.util.Random().nextLong().toString
     api.put(rootFolder, "dev/liveKey", value)
 
+    //noinspection ScalaUnusedSymbol
     val res = Await.result(p.future, Duration(30, "seconds"))
 
     dc.close()
@@ -247,10 +252,11 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
   it should "liveUpdateEffectiveSettings on all keys at start" in {
     val dc = new Dconfig()
-    var count = 0
+    @volatile var count = 0
     dc.liveUpdateEffectiveSettings().
       doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
       subscribe(_ => count = count+1)
+    Thread.sleep(500)
     assert(count > 1,"Did not receive more than one updated key!")
 
     dc.close()
@@ -258,13 +264,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
   it should "liveUpdateEffectiveSettings once with new value when a key is changed" in {
     val dc = new Dconfig()
-    var liveValue = ""
-    var count = 0
+    @volatile var liveValue = ""
+    @volatile var count = 0
     dc.liveUpdateEffectiveSettings().
       filter(kv=>kv.key=="liveKey").
       doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
       subscribe(kv => { count = count+1; liveValue = kv.value })
 
+    Thread.sleep(500)
     assert(liveValue != "","Did not receive initial value for liveKey!")
     assert(count == 1,s"Did not receive single update for liveKey! (saw $count updates)")
 
@@ -298,6 +305,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     api.put(rootFolder, "dev/liveKey", value)
 
     intercept[TimeoutException] {
+      //noinspection ScalaUnusedSymbol
       val res = Await.result(p.future, Duration(3, "seconds"))
     }
     dc.close()
@@ -318,7 +326,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
     intercept[TimeoutException] {
       val res = Await.result(p.future, Duration(3, "seconds"))
-      assert(false, s"No result expected but got: '${res}'")
+      fail(s"No result expected but got: '$res'")
     }
     dc.close()
   }
@@ -326,6 +334,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   it should "return None on non-existing key" in {
     val dc = new Dconfig()
     intercept[RuntimeException] {
+      //noinspection ScalaUnusedSymbol
       val res = dc.get("no-such-key")
     }
     dc.close()
@@ -392,14 +401,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val api = new com.ntent.configuration.ConsulApiImplDefault()
 
     val ttt = api.read("test/java-dconfig-acl-test/read-value")
-    assert(ttt.size == 1)
+    assert(ttt.length == 1)
     assert(ttt.head.decodedValue == "foo")
 
     val rnd = Random.nextInt()
     api.put("test/java-dconfig-acl-test","write-value",rnd.toString)
 
     val readWritten = api.read("test/java-dconfig-acl-test/write-value")
-    assert(readWritten.size == 1)
+    assert(readWritten.length == 1)
     assert(readWritten.head.decodedValue == rnd.toString)
 
   }
