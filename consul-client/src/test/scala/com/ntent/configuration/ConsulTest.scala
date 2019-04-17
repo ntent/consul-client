@@ -151,7 +151,6 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
-  //TODO: Test key delete.
   it should "live update only changed value when changed" in {
     val dc = new Dconfig()
     val p = Promise[KeyValuePair]()
@@ -164,7 +163,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.liveUpdate("liveKey").
       subscribe(v => {
         if (p.isCompleted)
-          fail("liveUpdate called more than once for a single key update")
+          p.tryFailure(new RuntimeException("liveUpdate called more than once for a single key update"))
         else
           p.trySuccess(v)
       })
@@ -186,7 +185,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.liveUpdate("liveKey","custom1","custom2").
       subscribe(v => {
         if (p.isCompleted)
-          fail("liveUpdate called more than once for a single key update")
+          p.tryFailure(new RuntimeException("liveUpdate called more than once for a single key update"))
         else
           p.trySuccess(v)
       })
@@ -195,19 +194,63 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val value = "live value-" + nextLongId()
     api.put(rootFolder, "custom2/liveKey", value)
 
-    val res = Await.result(p.future, Duration(30, "seconds"))
+    val res = Await.result(p.future, Duration(5, "seconds"))
     assert(res.fullPath == "custom2/liveKey")
     assert(res.value == value)
     dc.close()
   }
 
-  it should "live update when key deleted in child namespace" in {
+  it should "update to parent value, after child key delete" in {
+    val key = s"test${nextLongId()}liveKey"
+    val globalValue = "globalValue"
+    val devValue1 = "devValue1"
+    val devValue2 = "devValue2"
+    val api = new ConsulApiImplDefault()
+    println("Initialize devValue1, which will hide globalValue.")
+    api.put(rootFolder, s"global/$key", globalValue)
+    api.put(rootFolder, s"dev/$key", devValue1)
 
+    Thread.sleep(2000)
+    val dc = new Dconfig()
+    println(s"get($key) returned: ${dc.get(key)}")
+    @volatile var nextPromise = 0
+    val promises = Array.fill(3){ Promise[KeyValuePair] }
+    dc.liveUpdate(key).subscribe(v => {
+      println(s"subscription($nextPromise) received: $v")
+      promises(nextPromise).trySuccess(v)
+      nextPromise += 1
+    })
+
+    println("Remove devValue1, revealing globalValue.")
+    api.deleteKey(rootFolder, s"dev/$key")
+    println("Waiting on subscription(0)")
+    var kv = Await.result(promises(0).future, Duration(5, "seconds"))
+    println(s"get($key) returned: ${dc.get(key)}")
+    assert(kv.value == globalValue)
+
+    println("Set devValue2, which will hide globalValue.")
+    api.put(rootFolder, s"dev/$key", devValue2)
+    try {
+      println("Waiting on subscription(1)")
+      kv = Await.result(promises(1).future, Duration(5, "seconds"))
+    } finally {
+      println(s"get($key) returned: ${dc.get(key)}")
+    }
+    assert(kv.value == devValue2)
+
+    println("Remove devValue2, revealing globalValue.")
+    api.deleteKey(rootFolder, s"dev/$key")
+    try {
+      println("Waiting on subscription(2)")
+      kv = Await.result(promises(2).future, Duration(5, "seconds"))
+    } finally {
+      println(s"get($key) returned: ${dc.get(key)}")
+    }
+    assert(kv.value == globalValue)
+
+    dc.close()
   }
 
-
-
-  //TODO: Test key delete.
   it should "not live update when key change in parent namespace" in {
     val dc = new Dconfig()
     val p = Promise[KeyValuePair]

@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.typesafe.config.ConfigFactory
 import org.apache.commons.codec.binary.Base64
 
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise, blocking}
 import scala.util.Success
@@ -21,7 +22,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   //Make sure configRoot path doesn't have a leading '/' and ends with a single '/'
   lazy val configRootPath: String = rootPath.stripMargin('/').stripSuffix("/") + '/'
   val consulApi: ConsulApiImplDefault = new ConsulApiImplDefault()
-  private var defaultKeyStores = defKeyStores
+  @volatile private var defaultKeyStores = defKeyStores
   if(defKeyStores.nonEmpty) {
     defaultKeyStores = expandAndReverseNamespaces(defKeyStores.toArray)
   } else {
@@ -29,9 +30,9 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
   override val keystores: Seq[String] = defaultKeyStores.reverse
 
-  private val events = Subject[KeyValuePair]()
-  private lazy val distictChanges = events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
-  private var settings:Map[String,String] = _
+  /** Subscribe to receive notice of Console value changes. */
+  private val updateEvents = Subject[KeyValuePair]()
+  @volatile private var settings: scala.collection.Map[String,String] = Map.empty[String,String]
   @volatile private var readLoopFatal:Throwable = _
   private val readingLoopTask = Promise[Boolean]
 
@@ -39,7 +40,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     // initialize a print-out of changes. this subscription doesn't print until there are two entries (a new value changed)
     // except it does flush when the subscription ends (even if the value never changed)
-    events.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged.slidingBuffer(2,1)).subscribe(kvs => {
+    updateEvents.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.slidingBuffer(2,1)).subscribe(kvs => {
       if (kvs.length == 2)
         logger.info(s"Changed config: ${kvs.head.fullPath} : ${kvs.head.value} => ${kvs(1).value}")
     }, e=> logger.error("Error in config change subscription. No longer printing configuration updates.",e))
@@ -55,7 +56,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
 
   private[configuration] def close() = {
-    events.onCompleted()
+    updateEvents.onCompleted()
     readingLoopTask.complete(Success(true))
   }
 
@@ -98,11 +99,11 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
   private def getChildContainers(path: String): Set[String] = {
     ensureOpen()
-    for {
+    (for {
       key <- settings.keySet
       if key.startsWith(path) && getContainerName(key, path).isDefined
       container <- getContainerName(key, path)
-    } yield container
+    } yield container).toSet
   }
 
   private def getContainerName(key: String, rootPath: String): Option[String] = {
@@ -138,7 +139,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     if (!folderWithRoot.endsWith("/")) folderWithRoot += "/"
 
     ensureOpen()
-    val uniqueChanges = distictChanges
+    val uniqueChanges = updateEvents
     // only changes that are a sub-path of the given folder.
     uniqueChanges.withFilter(kv => kv.fullPath.startsWith(folderWithRoot))
       .map(kv=>kv)
@@ -150,7 +151,7 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
 
     // distinct will only alert us of changes, but we want to emit all values when first subscribed to.
     // concatenate the existing keys/values with the upcoming changes.
-    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2, extractKeyFromPath(t._1, defaultKeyStores.toList))) ++ distictChanges
+    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2, extractKeyFromPath(t._1, defaultKeyStores.toList))) ++ updateEvents
 
     // get just the key of the setting names (removing the path data)
     val res:Observable[KeyValuePair] = for {
@@ -189,21 +190,28 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
     logger.info(s"listening to paths: $trackingPaths")
 
     // group by key and perform a distinctUntilChanged on each observable within the key
-    val uniqueChanges = distictChanges
-
-    uniqueChanges.withFilter(kv => {
-      val res = trackingPaths.contains(kv.fullPath)
-      if(res)
-        logger.debug(s"Tracking paths contains '${kv.fullPath}' with value '${kv.value}'.")
-      res
-    }).
-      map(_=> get(key,useDefaultKeystores,namespaces:_*)).
-      withFilter(_.isDefined).
-      map(_.get).
-      distinctUntilChanged.
-      doOnNext(v => logger.info(s"Watched config updated: ${v.fullPath} : ${v.value}")).
-      //observeOn(TrampolineScheduler())
-      observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
+    val uniqueChanges = updateEvents
+    uniqueChanges
+      // only the config roots we are using
+      .withFilter(kv => {
+        val res = trackingPaths.contains(kv.fullPath)
+        if(res)
+          logger.debug(s"Tracking paths contains '${kv.fullPath}' with value '${kv.value}'.")
+        res
+      })
+      // For this key, get the latest value (use root precedence)
+      .map(_=> get(key, useDefaultKeystores, namespaces:_*))
+      // If there is a value
+      .withFilter(_.isDefined)
+      // Get the KeyValuePair.
+      .map(_.get)
+      // Stop if you've heard this one before.
+      .distinctUntilChanged
+      // Log the value we're using now.
+      .doOnNext(kv => logger.info(s"Now using: ${kv.fullPath} : ${kv.value}"))
+      //.observeOn(TrampolineScheduler())
+      // Broadcast the new value to subscribers.
+      .observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
 
   private def initialRead(): Unit = {
@@ -258,21 +266,51 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
   }
 
   private def rebuild(keys: Array[ConsulKey]): Unit = {
-    val newSettings = (for {
-    //ns <- defaultKeyStores;
-      k <- keys
-      if !k.Key.endsWith("/")  // directory is listed as ending with "/", skip them
-    } yield ("/"+k.Key, k.decodedValue)).
-      toMap
+    // Mutable map lookup is 4x faster than immutable map lookup.  (Uses hash tables, versus trees.)
+    // http://www.lihaoyi.com/post/BenchmarkingScalaCollections.html#lookup-performance
 
-    // assign settings map before processing change events
+    // Map from each fullPath, to each value.
+    val newSettings = new mutable.HashMap[String, String]()
+    val oldSettings = settings
+    // Any new key/value pairs we need to broadcast to subscribers.
+    val updates = new mutable.ArrayBuffer[KeyValuePair]()
+
+    // For each Consul key-value pair,
+    for {
+      consulKey <- keys
+      if !consulKey.Key.endsWith("/")  // directory is listed as ending with "/", skip them
+    } {
+      val fullPath = "/" + consulKey.Key  // Start path-key with a slash.
+      val newValue = consulKey.decodedValue
+      // If there is a previous value for this fullPath, and it is the "same" as this value,
+      val prevValue = oldSettings.getOrElse(fullPath, null)
+      if (newValue == prevValue) {
+        // Store old value, in new map.  (Useful, if clients are comparing values from map.)
+        newSettings.put(fullPath, prevValue)
+      } else {
+        // Store the new value.
+        newSettings.put(fullPath, newValue)
+        // Record this update.
+        val key = extractKeyFromPath(fullPath, defaultKeyStores.toList)
+        updates += KeyValuePair(fullPath, newValue, key)
+      }
+    }
+
+    // Switch to new map, before broadcasting changes to subscribers.
     settings = newSettings
 
-    newSettings.foreach(kv => {
-      events.onNext(KeyValuePair(kv._1,kv._2,extractKeyFromPath(kv._1,defaultKeyStores.toList)))
+    // Broadcast new values.
+    updates.foreach(kv => updateEvents.onNext(kv))
+
+    // Also broadcast paths that no longer have values.
+    oldSettings.keys.filterNot(fp => newSettings.contains(fp)).foreach(fullPath => {
+      val key = extractKeyFromPath(fullPath, defaultKeyStores.toList)
+      updateEvents.onNext(KeyValuePair(fullPath, null, key))
     })
+
     logger.info(s"Refreshed at index: ${consulApi.index}")
   }
+
 }
 
 object Dconfig extends StrictLogging {

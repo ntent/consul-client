@@ -43,12 +43,18 @@ class ConsulApiImplDefault() {
       execute().returnContent()
   }
 
-  /**
-    * Internal method for unit tests to clean up.
-    * @param dir
-    */
+  /** Internal method for unit tests.  So they can delete a key. */
+  private[configuration] def deleteKey(dir: String, key: String) = {
+    val url = new URL(new URL(kvUrl, dir.stripMargin('/') + "/"), key)
+    Request.
+      Delete(url.toString).
+      aclToken(accessToken).
+      execute()
+  }
+
+  /** Internal method for unit tests to clean up.  Allow delete of a tree. */
   private[configuration] def deleteTree(dir: String) = {
-    val url = new URL(kvUrl, dir.stripMargin('/')+ "/?recurse")
+    val url = new URL(kvUrl, dir.stripMargin('/') + "/?recurse")
     Request.
       Delete(url.toString).
       aclToken(accessToken).
