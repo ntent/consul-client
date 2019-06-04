@@ -63,7 +63,7 @@ project(":consul-client_$scalaVersion") {
         compile group: 'com.fasterxml.jackson.module', name: "jackson-module-scala_$scalaVersion", version: '2.9.5'
         compile group: 'io.reactivex', name: "rxscala_$scalaVersion", version: '0.26.3'
 
-        compile group: 'com.typesafe.scala-logging', name: "scala-logging-slf4j_$scalaVersion", version: '2.1.2'
+        compile group: 'com.typesafe.scala-logging', name: "scala-logging_$scalaVersion", version: '3.9.2'
 
         // test
         testCompile 'org.slf4j:slf4j-simple:1.7.14'

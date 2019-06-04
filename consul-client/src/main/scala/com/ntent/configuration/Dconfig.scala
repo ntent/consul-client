@@ -1,6 +1,6 @@
 package com.ntent.configuration
 
-import com.typesafe.scalalogging.slf4j.StrictLogging
+import com.typesafe.scalalogging.StrictLogging
 import rx.lang.scala.{Observable, Subject}
 import rx.lang.scala.schedulers.ExecutionContextScheduler
 import java.nio.charset.StandardCharsets

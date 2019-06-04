@@ -1,7 +1,7 @@
 package com.ntent.configuration
 
 import com.typesafe.config._
-import com.typesafe.scalalogging.slf4j.StrictLogging
+import com.typesafe.scalalogging.StrictLogging
 import rx.lang.scala.Observable
 
 import scala.collection.JavaConverters._
