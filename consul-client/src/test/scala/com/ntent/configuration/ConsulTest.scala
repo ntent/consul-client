@@ -315,6 +315,7 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     dc.close()
   }
 
+  /** You can eliminate a Thread.sleep() call, by calling set() when it changes, and get() to await the change. */
   class NextValue[T] {
     @volatile private var lastValueFuture = new CompletableFuture[T]()
     @volatile private var prevValue: T = _
