@@ -146,20 +146,32 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
       .observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
 
+  /**
+    * Subscribers to this method will receive "live updates", like from other liveUpdate*() methods of this class.
+    * But before that, will receive all current config values.  Wrap your Subscriber with
+    * [[com.ntent.configuration.InitSubscriber]], like so:
+    * <pre>
+    * Observable[KeyValuePair] pairs = Dconfig().liveUpdateEffectiveSettings()
+    * Subscriber[KeyValuePair] initSub = InitSubscriber(new Subscriber() { ... })
+    * pairs.subscribe(initSub)
+    * initSub.waitUntilInitialized(20, TimeUnit.SECONDS)
+    * </pre>
+    * This will strip out the "end init marker" pair, so Subscriber's onNext() method won't receive it.
+    * Plus, waitUntilInitialized() will block until your Subscriber has received onNext() calls for all current
+    * config values.
+    */
   override def liveUpdateEffectiveSettings() : Observable[KeyValuePair] = {
     ensureOpen()
 
-    // distinct will only alert us of changes, but we want to emit all values when first subscribed to.
-    // concatenate the existing keys/values with the upcoming changes.
-    val ob = Observable.from(settings).map(t=>KeyValuePair(t._1,t._2, extractKeyFromPath(t._1, defaultKeyStores.toList))) ++ updateEvents
+    // All "current" values.
+    val currentValueObservable = Observable.from(settings).map(
+      t => KeyValuePair(t._1, t._2, extractKeyFromPath(t._1, defaultKeyStores.toList))
+    )
 
-    // get just the key of the setting names (removing the path data)
-    val res:Observable[KeyValuePair] = for {
-      kv <- ob
-      value = get(kv.key, useDefaultKeystores = true)
-      if value.isDefined
-    } yield value.get
+    // Filtered current values + "endInit" marker + filtered update events.
+    val res = filterByPath(currentValueObservable) ++ InitSubscriber.endInit ++ filterByPath(updateEvents)
 
+    // Suppress "repeat" values.  Only let novel/new values through.
     res.groupBy(kv=>kv.fullPath).flatMap(kv=>kv._2.distinctUntilChanged)
       .observeOn(ExecutionContextScheduler(scala.concurrent.ExecutionContext.global))
   }
@@ -174,6 +186,19 @@ class Dconfig(rootPath: String, defKeyStores: String*) extends StrictLogging wit
           extractKeyFromPath(path,rest)
       case Nil => path
     }
+  }
+
+  private def filterByPath(observable: Observable[KeyValuePair]): Observable[KeyValuePair] = {
+    // Create another Observable with a "for comprehension" (for-yield).  To be clear, this creates a "comprehension",
+    // a method.  This code doesn't execute right now.  The comprehension is only executed after this observable
+    // is subscribed to, and only as the source observable generates data.
+    for {
+      kv <- observable
+      // Only use the key paths we're configured for.
+      // Only use the highest-priority path that contains this key.  (If this key appears in more than one.)
+      value = get(kv.key, useDefaultKeystores = true)
+      if value.isDefined
+    } yield value.get
   }
 
   override def liveUpdate(key: String, namespaces: String*): Observable[KeyValuePair] = {

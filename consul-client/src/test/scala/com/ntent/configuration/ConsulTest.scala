@@ -2,14 +2,14 @@ package com.ntent.configuration
 
 import java.io.File
 import java.net.InetAddress
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{CompletableFuture, TimeUnit, TimeoutException}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import com.typesafe.config.ConfigFactory
 import com.ntent.configuration.ConsulTest._
-
 import org.apache.commons.io.FileUtils
 import org.scalatest._
+import rx.lang.scala.Subscriber
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
@@ -302,43 +302,85 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
 
   it should "liveUpdateEffectiveSettings on all keys at start" in {
     val dc = new Dconfig()
-    @volatile var count = 0
+    val count = new AtomicInteger()
+    val subscriber = InitSubscriber(new Subscriber[KeyValuePair]() {
+      override def onNext(value: KeyValuePair): Unit = count.incrementAndGet()
+    })
     dc.liveUpdateEffectiveSettings().
       doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
-      subscribe(_ => count = count+1)
-    Thread.sleep(500)
-    assert(count > 1,"Did not receive more than one updated key!")
+      subscribe(subscriber)
+    subscriber.waitUntilInitialized(2, TimeUnit.SECONDS)
+    assert(count.get() > 1,"Did not receive more than one updated key!")
 
     dc.close()
   }
 
-  it should "liveUpdateEffectiveSettings once with new value when a key is changed" in {
-    val dc = new Dconfig()
-    @volatile var liveValue = ""
-    @volatile var count = 0
-    dc.liveUpdateEffectiveSettings().
-      filter(kv=>kv.key=="liveKey").
-      doOnEach(kv=>Console.println(s"${kv.fullPath} = ${kv.value}")).
-      subscribe(kv => { count = count+1; liveValue = kv.value })
+  class NextValue[T] {
+    @volatile private var lastValueFuture = new CompletableFuture[T]()
+    @volatile private var prevValue: T = _
+    def set(value: T): Unit = {
+      if (lastValueFuture.isDone) {
+        lastValueFuture = CompletableFuture.completedFuture(value)
+      } else {
+        lastValueFuture.complete(value)
+      }
+    }
+    def get(): T = {
+      try {
+        prevValue = lastValueFuture.get(2, TimeUnit.SECONDS)
+        lastValueFuture = new CompletableFuture[T]()
+        prevValue
+      } catch {
+        case ex: TimeoutException =>
+          val ex2 = new TimeoutException("Expected value did not arrive.")
+          ex2.initCause(ex)
+          throw ex2
+      }
+    }
+    def getPrev: T = prevValue
+  }
 
-    Thread.sleep(500)
-    assert(liveValue != "","Did not receive initial value for liveKey!")
-    assert(count == 1,s"Did not receive single update for liveKey! (saw $count updates)")
+  it should "liveUpdateEffectiveSettings once with new value when a key is changed" in {
+    // Initial count.
+    val dc = new Dconfig()
+    val count1 = new AtomicInteger()
+    val subscriber1 = InitSubscriber(new Subscriber[KeyValuePair]() {
+      override def onNext(value: KeyValuePair): Unit = count1.incrementAndGet()
+    })
+    dc.liveUpdateEffectiveSettings().subscribe(subscriber1)
+    subscriber1.waitUntilInitialized(2, TimeUnit.SECONDS)
+    val count = count1.get()
+
+    // Subscriber 2.  Counts, and records "last value".
+    val count2 = new AtomicInteger()
+    val nextValue = new NextValue[String]()
+    val subscriber2 = InitSubscriber(new Subscriber[KeyValuePair]() {
+      override def onNext(kv: KeyValuePair): Unit = {
+        Thread.sleep(10) // Introduce a delay.  So waitUntilInitialized() makes a difference.
+        count2.incrementAndGet()
+        nextValue.set(kv.value)
+      }
+    })
+    dc.liveUpdateEffectiveSettings().subscribe(subscriber2)
+    Console.println(s"Before waitUntilInitialized: count($count) count2($count2)")
+    subscriber2.waitUntilInitialized(2, TimeUnit.SECONDS)
+    Console.println(s" After waitUntilInitialized: count($count) count2($count2)")
+
+    assert(nextValue.get() != "","Did not receive initial value for liveKey!")
+    assert(count2.get() == count,s"Did not receive single update for liveKey! (saw $count2 updates out of $count)")
 
     val api = new ConsulApiImplDefault()
     var value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
-    Thread.sleep(2000)
-    assert(liveValue == value, s"Expected live update to $value but got $liveValue")
-    assert(count == 2,s"Did not receive second update for liveKey! (saw $count updates)")
+    assert(nextValue.get() == value, s"Expected live update to $value but got ${nextValue.getPrev}")
+    assert(count2.get() == count + 1,s"Did not receive second update for liveKey! (saw $count2 updates out of ${count + 1})")
 
     value = "live value-" + nextLongId()
     api.put(rootFolder, "dev/liveKey", value)
 
-    Thread.sleep(2000)
-    assert(liveValue == value, s"Expected live update to $value but got $liveValue")
-    assert(count == 3,s"Did not receive third update for liveKey! (saw $count updates)")
+    assert(nextValue.get() == value, s"Expected live update to $value but got ${nextValue.getPrev}")
+    assert(count2.get() == count + 2,s"Did not receive third update for liveKey! (saw $count2 updates out of ${count + 2})")
 
     dc.close()
   }
@@ -407,11 +449,12 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
     val host = InetAddress.getLocalHost.getHostName
     val value = "local value-" + nextLongId()
     val key = "localKey"
-    api.put(rootFolder, s"$host/$key", value)
+    val nextValue = new NextValue[String]()
+    dc.liveUpdateAll().subscribe(kv => nextValue.set(kv.value))
 
-    Thread.sleep(2000)
-    val got = dc.get(key)
-    assert(got == value)
+    api.put(rootFolder, s"$host/$key", value)
+    assert(nextValue.get() == value)
+    assert(dc.get(key) == value)
     dc.close()
   }
 
