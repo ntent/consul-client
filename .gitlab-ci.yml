@@ -1,0 +1,72 @@
+image: openjdk:8-jdk
+
+stages:
+- Build
+- Publish
+
+variables:
+  MAVEN_OPTS: " -Xms512m -Xmx1024m -Dmaven.repo.local=/m2"
+  GRADLE_OPTS: " -Dorg.gradle.daemon=false -Dgradle.user.home=/cache/${CI_PROJECT_PATH_SLUG}/gradle -Dorg.gradle.logging.level=info"
+
+
+.build:
+  stage: Build
+  script:
+  - ./gradlew --stacktrace --info test jar
+  artifacts:
+    expire_in: 1 week
+    # NOTE: This will generate error output in the build log until there are unit tests added.
+    #       it will not fail the build.
+    reports:
+      junit: "consul-client/build/test-results/test/*.xml"
+
+build:
+  extends: .build
+  artifacts:
+    paths:
+    - "consul-client/build/libs/*.*"
+  only:
+  - /^v([0-9\\.]+)(-.+)?$/@jvm-shared/consul-client
+  except:
+  - branches
+
+build_branch:
+  extends: .build
+  except:
+  - tags
+
+.publish:
+  stage: Publish
+  script:
+  - ./gradlew --info --stacktrace publish
+
+publish:
+  extends: .publish
+  only:
+  - /^v([0-9\\.]+)(-.+)?$/@jvm-shared/consul-client
+  except:
+  - branches
+
+publish snapshot:
+  extends: .publish
+  when: manual
+  except:
+  - tags
+  - master
+
+pages:
+  stage: Publish
+  dependencies:
+  - build
+  script:
+  - ./gradlew --info createVersionHtml createVersionBadge
+  - mkdir ./public
+  - mv ./build/version.html ./public/
+  - mv ./build/version.svg  ./public/
+  artifacts:
+    paths:
+    - public
+  only:
+  - /^v([0-9\\.]+)$/@jvm-shared/consul-client
+  except:
+  - branches

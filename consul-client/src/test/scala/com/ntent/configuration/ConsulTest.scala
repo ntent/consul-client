@@ -22,18 +22,29 @@ import scala.sys.process._
 class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
   // set up our keystores
   val rootFolder = "test/app1"
-  System.setProperty("dconfig.consul.keyStores","global dev {host}")
-  //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
-  System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
 
   var consulProcess: Process = _
 
+  val relDir = if ( System.getProperty("user.dir").endsWith("consul-client/consul-client") ||
+    System.getProperty("user.dir").endsWith("consul-client\\consul-client")) "../bin/" else "bin/"
+
+
   override def beforeAll(conf: ConfigMap): Unit = {
+    System.clearProperty("dconfig.consul.keyStores")
+    System.clearProperty("dconfig.consul.url")
+    System.setProperty("dconfig.consul.keyStores","global dev {host}")
+    //System.setProperty("dconfig.consul.url", "http://mw-01.lv.ntent.com:8500/")
+    System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "INFO")
+    ConfigFactory.invalidateCaches()
 
     val exe = if(System.getProperty("os.name").toLowerCase.contains("windows")) "consul.exe" else "consul"
-    consulProcess = Seq("bin/"+exe, "agent", "-advertise", "127.0.0.1", "-config-file", "bin/config.json").run()
+    println("Working directory is: " + System.getProperty("user.dir"))
+    consulProcess = Seq(relDir + exe, "agent", "-advertise", "127.0.0.1", "-config-file", relDir + "config.json").run()
     Thread.sleep(8000)
 
+    val appSettings = ConfigFactory.load()
+    println("AppSettings:")
+    println(appSettings)
     val api = new com.ntent.configuration.ConsulApiImplDefault()
     api.deleteTree(rootFolder)
     //noinspection ScalaUnusedSymbol
@@ -58,13 +69,14 @@ class ConsulTest extends FlatSpec with Matchers with OneInstancePerTest with Bef
   }
 
   def cleanup(): Unit = {
+    println("Cleaning up after consul.exe")
     if(consulProcess != null) {
       consulProcess.destroy()
       Thread.sleep(500)
       consulProcess = null
     }
-    if(new File("bin/consul-data").exists())
-      FileUtils.deleteDirectory(new File("bin/consul-data"))
+    if(new File(relDir + "consul-data").exists())
+      FileUtils.deleteDirectory(new File(relDir + "consul-data"))
   }
 
   private val globalSettings = Seq(

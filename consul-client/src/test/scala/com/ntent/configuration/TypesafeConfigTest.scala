@@ -6,10 +6,19 @@ import org.scalatest._
 /**
   * Created by tstumpges on 6/5/2017.
   */
-class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest with BeforeAndAfterEach {
-  System.setProperty("dconfig.consul.url", "")
-  System.setProperty("dconfig.consul.keyStores", "")
-  ConfigFactory.invalidateCaches()
+class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest with BeforeAndAfterAllConfigMap with BeforeAndAfterEach {
+
+  override def beforeEach(): Unit = {
+    System.setProperty("dconfig.consul.url", "")
+    System.setProperty("dconfig.consul.keyStores", "")
+    ConfigFactory.invalidateCaches()
+  }
+
+  override protected def afterAll(configMap: ConfigMap): Unit = {
+    System.clearProperty("dconfig.consul.url")
+    System.clearProperty("dconfig.consul.keyStores")
+    ConfigFactory.invalidateCaches()
+  }
 
   it should "fall back to TypesafeConfigSettings when no consul url is set" in {
     val dconfig = Dconfig()
@@ -254,4 +263,6 @@ class TypesafeConfigTest  extends FlatSpec with Matchers with OneInstancePerTest
       assert(pair.value == pair.key)
     }
   }
+
+
 }
