@@ -1,3 +1,24 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+
+
+plugins {
+    id 'de.undercouch.download' version '4.0.0'
+}
+
+def consulDownloadUrl
+def consulFile
+if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+    consulFile = "consul.exe"
+    consulDownloadUrl = "https://releases.hashicorp.com/consul/1.6.2/consul_1.6.2_windows_amd64.zip"
+} else if (Os.isFamily(Os.FAMILY_MAC)) {
+    consulFile = "consul"
+    consulDownloadUrl = "https://releases.hashicorp.com/consul/1.6.2/consul_1.6.2_darwin_amd64.zip"
+} else { // linux
+    consulFile = "consul"
+    consulDownloadUrl = "https://releases.hashicorp.com/consul/1.6.2/consul_1.6.2_linux_amd64.zip"
+}
+def consulExists = rootProject.layout.projectDirectory.file("bin/${consulFile}").asFile.exists()
+
 apply plugin: 'scala'
 apply plugin: 'maven-publish'
 
@@ -66,3 +87,30 @@ publishing {
         }
     }
 }
+
+
+    /*
+      Get consul for tests
+     */
+    task downloadConsul(type: Download) {
+        onlyIf { !consulExists }
+        src consulDownloadUrl
+        dest new File(rootProject.buildDir, 'consul.zip')
+    }
+    task getConsul(type: Copy) {
+        dependsOn downloadConsul
+        onlyIf {
+            // see if we don't already have it.
+            def exists = consulExists
+            if (exists)
+                logger.info "${consulFile} already exists!"
+            else
+                logger.info "${consulFile} does not exist!"
+
+            return !exists
+        }
+        from zipTree(new File(rootProject.buildDir,'consul.zip'))
+        into rootProject.layout.projectDirectory.dir("bin")
+    }
+
+    project.tasks.test.dependsOn(project.tasks.getConsul)
