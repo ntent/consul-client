@@ -1,0 +1,7 @@
+{
+    "data_dir": "bin/consul-data",
+    "log_level": "TRACE",
+    "server": true,
+    "bootstrap": true,
+    "datacenter": "testdc"
+}
